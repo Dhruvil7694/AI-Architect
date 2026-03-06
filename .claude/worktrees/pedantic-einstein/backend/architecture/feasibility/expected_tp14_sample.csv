@@ -1,0 +1,3 @@
+fp_number,expected_fsi,expected_gc_pct,expected_cop_pct,expected_frontage_m,expected_height_band
+127,1.42,40.0,100.0,17.55,HIGH_RISE
+133,1.97,40.0,100.0,22.95,HIGH_RISE

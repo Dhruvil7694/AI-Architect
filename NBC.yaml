@@ -1,0 +1,71 @@
+nbc:
+  version: "NBC 2016 - Part 4 (Fire & Life Safety)"
+  occupancy_group: "Residential (Group A)"
+
+  building_classification:
+    high_rise:
+      threshold_height_m: 15
+    low_rise:
+      max_height_m: 15
+
+  occupant_load:
+    residential:
+      load_factor_sqm_per_person: 12.5   # conservative planning assumption
+      calculation_basis: "gross_floor_area"
+
+  egress:
+    minimum_number_of_exits:
+      residential: 2
+
+    common_path_of_travel:
+      max_distance_m:
+        sprinklered: 30
+        non_sprinklered: 22.5
+
+    travel_distance:
+      max_distance_m:
+        sprinklered: 30
+        non_sprinklered: 22.5
+
+    corridor_width:
+      minimum_m: 1.0
+
+    staircase:
+      minimum_width_m:
+        low_rise: 1.0
+        high_rise: 1.5
+      minimum_tread_mm: 250
+      maximum_riser_mm: 190
+      minimum_headroom_m: 2.2
+
+    door:
+      minimum_width_m: 0.9
+      direction_of_opening: "in_direction_of_egress"
+
+  high_rise_requirements:
+    firefighting_shaft:
+      required_above_height_m: 15
+      fire_resistance_rating_minutes: 120
+
+    fire_lift:
+      required_above_height_m: 15
+
+    refuge_area:
+      required_above_height_m: 60
+      minimum_area_percent_of_floor: 4
+
+  fire_separation:
+    minimum_separation_distance_m: 6
+
+  compartmentation:
+    fire_barrier_rating_minutes: 120
+    fire_door_rating_minutes: 120
+
+  structural_fire_resistance:
+    load_bearing_members_rating_minutes: 120
+    floor_slab_rating_minutes: 120
+    staircase_enclosure_rating_minutes: 120
+
+  validation_mode:
+    enforcement: "validation_only"
+    generation: false

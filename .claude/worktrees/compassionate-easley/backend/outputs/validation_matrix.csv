@@ -1,0 +1,4 @@
+fp_number,plot_area_sqft,achieved_fsi,max_fsi,achieved_gc_pct,permissible_gc_pct,cop_provided_sqft,cop_required_sqft,cop_pct,frontage_m,height_band,error
+127,26027.94889742681,1.4215,2.7,40.0,40.0,2602.8,2602.79,100.00038420310514,17.55157272,HIGH_RISE,
+133,39595.38967861825,1.9702,2.7,40.0,40.0,3959.56,3959.54,100.00050510917934,22.949824560000003,HIGH_RISE,
+17,1486.605545223438,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,envelope TOO_SMALL

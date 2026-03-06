@@ -1,0 +1,22 @@
+{
+  "formatId": "stgen-dxf-undo-v1",
+  "version": "1.0",
+  "fileHash": "2618fe62",
+  "lastModified": 1772555186238,
+  "undoStack": [],
+  "redoStack": [
+    {
+      "type": "move",
+      "label": "Move",
+      "timestamp": 1772555183298,
+      "data": {
+        "actionType": "move",
+        "entityIndices": [
+          0
+        ],
+        "dx": -5.39487503608461,
+        "dy": -15.587063818262598
+      }
+    }
+  ]
+}

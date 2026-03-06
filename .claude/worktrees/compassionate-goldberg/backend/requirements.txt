@@ -1,0 +1,29 @@
+# Core Django + GeoDjango
+Django>=4.2,<5.0
+djangorestframework>=3.14,<4.0
+django-cors-headers>=4.0
+psycopg2-binary>=2.9
+
+# DXF parsing
+ezdxf>=1.1
+
+# Geometry
+shapely>=2.0
+geopandas>=0.14
+
+# Excel parsing
+pandas>=2.0
+openpyxl>=3.1        # xlsx engine for pandas
+xlrd>=2.0.1          # for old .xls format
+
+# Rules engine
+pyyaml>=6.0
+
+# Envelope engine
+numpy>=1.26
+
+# Environment (for .env and OPENAI_API_KEY)
+python-dotenv>=1.0
+
+# Optional: visual analysis for simulate_cop_strategies_synthetic --plot
+matplotlib>=3.7

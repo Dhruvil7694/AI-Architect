@@ -1,0 +1,318 @@
+meta:
+  regulation_name: "CGDCR 2017"
+  authority_category: "D1"
+  authority_name: "SUDA"
+  applicable_use: "Residential - DW3 (Apartments)"
+  source_documents:
+    part_1: "Procedure Regulations"
+    part_2: "Planning Regulations"
+    part_3: "Performance Regulations"
+  version: "POC-FULL-RESIDENTIAL-V2"
+
+# ============================================================
+# PART I – PROCEDURAL TRIGGERS
+# ============================================================
+
+procedure_requirements:
+  development_permission_required: true
+  building_use_permission_required: true
+  area_statement_form: "Form 6A"
+  person_on_record_required:
+    architect: true
+    engineer: true
+    structural_engineer: true
+
+# ============================================================
+# LAND & ACCESS
+# ============================================================
+
+land_area_rules:
+  net_plot_area:
+    formula: "MIN(revenue_area, tps_area, site_area) - deductions"
+    deductions:
+      - road_widening
+      - dp_reservation
+      - land_not_in_possession
+
+access_rules:
+  minimum_road_width_for_dw3: 9
+  land_locked:
+    minimum_access_width: 12
+  if_road_width_less_than_9:
+    dw3_allowed: false
+    max_height: 10
+
+# ============================================================
+# USE & ZONE CONTROL (PART II)
+# ============================================================
+
+use_zone:
+  zone: "R1"
+  reference_table: "Table 6.8"
+
+fsi_rules:
+  base_fsi: 1.8
+
+  premium_tiers:
+    - additional_fsi: 0.9
+      resulting_cap: 2.7
+      jantri_rate_percent: 40
+
+    - additional_fsi: 1.8
+      resulting_cap: 3.6
+      jantri_rate_percent: 40
+      corridor_required: true
+
+    - additional_fsi: 2.2
+      resulting_cap: 4.0
+      jantri_rate_percent: 40
+      corridor_required: true
+
+  corridor_rule:
+    eligible_if:
+      road_width_min_m: 36
+      buffer_distance_m: 200
+
+fsi_exclusions:
+  staircase: "formula_based"
+  lift_well: "formula_based"
+  parking_floor: "100_percent_excluded"
+  refuge_area:
+    trigger_height: 25
+  open_to_sky_space: "excluded"
+  loft:
+    max_percentage: 30
+    max_height: 1.2
+
+# ============================================================
+# BUILDING HEIGHT (TABLE 6.23)
+# ============================================================
+
+height_rules:
+  road_width_height_map:
+    - road_max: 9
+      max_height: 10
+    - road_max: 12
+      max_height: 16.5
+    - road_max: 18
+      max_height: 30
+    - road_max: 36
+      max_height: 45
+    - road_max: 999
+      max_height: 70
+  airport_noc_required: true
+
+# ============================================================
+# HEIGHT BANDS (PIPELINE CLASSIFICATION)
+# ============================================================
+
+height_band_rules:
+  low_rise_max_m: 10
+  mid_rise_max_m: 15
+
+# ============================================================
+# MARGINS
+# ============================================================
+
+road_side_margin:
+  reference: "Table 6.24"
+  logic: "road_width_based OR height_based_whichever_higher"
+  road_width_margin_map:
+    - road_max: 9
+      margin: 3.0
+    - road_max: 12
+      margin: 4.5
+    - road_max: 18
+      margin: 6.0
+    - road_max: 36
+      margin: 9.0
+    - road_max: 999
+      margin: 12.0
+  height_formula: "H / 5"
+  minimum_road_side_margin: 1.5
+
+side_rear_margin:
+  reference: "Table 6.26"
+  height_margin_map:
+    - height_max: 16.5
+      rear: 3.0
+      side: 3.0
+    - height_max: 25
+      rear: 4.0
+      side: 4.0
+    - height_max: 45
+      rear: 6.0
+      side: 6.0
+    - height_max: 999
+      rear: 8.0
+      side: 8.0
+
+inter_building_margin:
+  reference: "Table 6.25"
+  taller_building_rule: true
+  formula: "H / 3"
+  minimum_spacing_m: 3.0
+  applies_to: "parallel_facing_walls"
+
+# ============================================================
+# OPEN TO SKY (TABLE 6.45)
+# ============================================================
+
+ots_rules:
+  dimension_based_on_height: true
+  reference: "Table 6.45"
+  mandatory_for_rooms_without_external_wall: true
+
+# ============================================================
+# BUILDING INFRASTRUCTURE (PART III)
+# ============================================================
+
+architectural_elements:
+  boundary_wall:
+    road_side_max_height: 1.5
+    other_side_max_height: 1.8
+  access_path_min_width: 1.8
+  ramp_gradient_max: "1:12"
+  max_paving_open_space_percentage: 50
+
+minimum_clearance_height:
+  habitable_room: 2.75
+  bathroom: 2.1
+
+mezzanine:
+  allowed: true
+  headroom_min: 2.1
+
+loft:
+  headroom_max: 1.2
+
+basement:
+  permitted: true
+  use: "parking/services"
+  height_min: 2.4
+
+staircase:
+  reference: "Table 13.2"
+  minimum_width:
+    residential_apartment: 1.0
+  tread_min: 250
+  riser_max: 190
+  handrail_required: true
+
+lift_requirement:
+  if_height_above: 10
+  lift_required: true
+
+ventilation:
+  habitable_room_window_ratio: 0.1667
+  bathroom_mechanical_or_window: true
+
+sanitation:
+  wc_required_per_unit: true
+
+ground_coverage:
+  reference: "Table 6.22"
+  max_percentage_dw3: 40
+
+parking:
+  compute_as_per_table_6_44: true
+  required_but_not_drawn_in_poc: true
+
+# ============================================================
+# FIRE & SAFETY
+# ============================================================
+
+fire_safety:
+  fire_certificate_required: true
+  refuge_area_if_height_above: 25
+  fire_noc_required_if_height_above: 15
+
+# ============================================================
+# STRUCTURAL SAFETY (PART III – 16)
+# ============================================================
+
+structural:
+  seismic_design_mandatory: true
+  structural_engineer_required: true
+  structural_stability_certificate_required: true
+
+# ============================================================
+# ENVIRONMENTAL (PART III – 17)
+# ============================================================
+
+environmental:
+  rainwater_harvesting_required: true
+  solid_waste_bin_required: true
+  tree_plantation_mandatory: true
+  solar_water_heating_required_if_builtup_above: 500
+
+# ============================================================
+# NOC TRIGGERS
+# ============================================================
+
+noc_requirements:
+  airport_authority: true
+  railway_if_applicable: conditional
+  defense_if_applicable: conditional
+  environmental_clearance_if_large_plot: conditional
+
+# ============================================================
+# COMPLIANCE ENFORCEMENT FLAGS
+# ============================================================
+
+compliance:
+  enforce_whichever_margin_higher: true
+  enforce_height_vs_road_logic: true
+  enforce_ventilation_check: true
+  enforce_ots_dimension: true
+  enforce_fire_trigger: true
+  enforce_structural_trigger: true
+
+
+# ============================================================
+# COMMON OPEN PLOT (MULTI-COP SUPPORT - POC SAFE MODE)
+# ============================================================
+
+common_open_plot:
+  # COP applies only when plot area exceeds this threshold (sqm).
+  applies_if_plot_area_above_sqm: 2000
+
+  # Minimum fraction of total plot area to reserve as COP.
+  required_fraction: 0.10
+
+  # Absolute minimum total COP area in sqm (overrides fraction when binding).
+  minimum_total_area_sqm: 200
+
+  multi_cop_allowed: true
+
+  # Minimum area for each individual COP block.
+  minimum_individual_cop_area_sqm: 200
+
+  # Height-based margin from COP to building (Table 6.25 semantics).
+  margin_height_bands:
+    - height_max_m: 25
+      margin_m: 3.0
+    - height_max_m: 999
+      margin_m: 6.0
+
+  # GDCR 2017: minimum dimension of COP >= 7.5 m (used by generate_common_plot).
+  minimum_dimension_m: 7.5
+
+  geometry_constraints:
+    shape: rectangular_only
+    minimum_width_m: 10
+    minimum_depth_m: 10
+    minimum_internal_angle_deg: 60
+
+  placement_constraints:
+    must_not_overlap_buildings: true
+    must_not_overlap_each_other: true
+    must_touch:
+      boundary_or_internal_road: true
+
+  distribution_strategy:
+    allowed_patterns:
+      - equal_split
+      - proportional_split
+      - custom_split
+    maximum_number_of_cop_blocks: 4   # POC cap to avoid fragmentation explosion

@@ -1,0 +1,6 @@
+{
+  "enabledMcpjsonServers": [
+    "stgen-dxf-viewer"
+  ],
+  "enableAllProjectMcpServers": true
+}
