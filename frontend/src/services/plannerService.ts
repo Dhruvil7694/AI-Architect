@@ -50,18 +50,27 @@ export interface PlanGeometryDto {
 }
 
 export interface PlanResultMetrics {
+  // Plot / regulatory limits (echoed from backend)
   plotAreaSqm?: number;
+  roadWidthM?: number;
+  maxFSI?: number;
+  maxBUA?: number;
+  gdcrMaxHeightM?: number;
+  // Achieved development
+  nTowersRequested?: number;
+  nTowersPlaced?: number;
+  floorCount?: number;
+  buildingHeightM?: number;
+  totalFootprintSqm?: number;
+  achievedBUA?: number;
+  achievedFSI?: number;
+  achievedGCPct?: number;
+  // Legacy / other
   envelopeAreaSqft?: number;
   groundCoveragePct?: number;
   copAreaSqft?: number;
   copStatus?: string;
-  buildingHeightM?: number;
-  roadWidthM?: number;
-  nTowersRequested?: number;
-  nTowersPlaced?: number;
   spacingRequiredM?: number;
-  maxFSI?: number;
-  maxBUA?: number;
 }
 
 export interface PlanResultDto {

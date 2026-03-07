@@ -2,36 +2,88 @@
 
 import { usePlannerStore } from "@/state/plannerStore";
 
-const SQFT_TO_SQM = 0.09290304;
+/** GDCR Table 6.22 — max ground coverage for DW3 is always 40 %. */
+const GC_LIMIT_PCT = 40;
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function UtilBar({ pct }: { pct: number }) {
+  const clamped = Math.min(100, Math.max(0, pct));
+  const color =
+    clamped >= 90
+      ? "bg-emerald-500"
+      : clamped >= 60
+        ? "bg-blue-500"
+        : "bg-amber-400";
+  return (
+    <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
+      <div
+        className={`h-full rounded-full ${color} transition-all duration-500`}
+        style={{ width: `${clamped}%` }}
+      />
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-1">
+      <dt className="shrink-0 text-neutral-500">{label}</dt>
+      <dd className="text-right font-medium text-neutral-900 tabular-nums">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function UtilRow({ label, pct }: { label: string; pct: number }) {
+  return (
+    <div>
+      <div className="flex justify-between">
+        <span className="text-neutral-500">{label}</span>
+        <span className="font-medium tabular-nums text-neutral-900">
+          {pct.toFixed(1)}%
+        </span>
+      </div>
+      <UtilBar pct={pct} />
+    </div>
+  );
+}
+
+function Section({
+  title,
+  titleClass,
+  borderClass,
+  children,
+}: {
+  title: string;
+  titleClass?: string;
+  borderClass?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  children: any;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <h4
+        className={`border-b pb-0.5 text-[10px] font-semibold uppercase tracking-widest ${titleClass ?? "text-neutral-500"} ${borderClass ?? "border-neutral-200"}`}
+      >
+        {title}
+      </h4>
+      <dl className="flex flex-col gap-1">{children}</dl>
+    </div>
+  );
+}
+
+// ── Main panel ─────────────────────────────────────────────────────────────────
 
 export function PlanningMetricsPanel() {
   const activeScenarioId = usePlannerStore((s) => s.activeScenarioId);
   const scenarios = usePlannerStore((s) => s.scenarios);
   const scenario = scenarios.find((s) => s.id === activeScenarioId);
-  const summary = (scenario?.planResultSummary as { metrics?: Record<string, unknown> }) ?? {};
-  const m = summary.metrics ?? {};
-
-  const safeNum = (x: unknown, fallback: number): number => {
-    const n = Number(x);
-    return Number.isFinite(n) ? n : fallback;
-  };
-
-  const plotAreaSqm = safeNum(m.plotAreaSqm, 0);
-  const achievedFSI = safeNum((m as Record<string, unknown>).achievedFSI, NaN);
-  const maxFSI = typeof m.maxFSI === "number" && Number.isFinite(m.maxFSI) ? m.maxFSI : safeNum(m.baseFSI, 0);
-  const fsi = Number.isFinite(achievedFSI) ? achievedFSI : maxFSI;
-  const achievedBUA = safeNum((m as Record<string, unknown>).achievedBUA, NaN);
-  const maxBUA = safeNum(m.maxBUA, 0);
-  const bua = Number.isFinite(achievedBUA) ? achievedBUA : maxBUA;
-  const groundCoveragePct = typeof m.groundCoveragePct === "number" && Number.isFinite(m.groundCoveragePct) ? m.groundCoveragePct : 0;
-  const copRequiredSqm = safeNum((m as Record<string, unknown>).copRequiredSqm, 0);
-  const copProvidedSqm = safeNum((m as Record<string, unknown>).copProvidedSqm, 0);
-  const copAreaSqm = Number.isFinite(copProvidedSqm) ? copProvidedSqm : safeNum(m.copAreaSqft, 0) * SQFT_TO_SQM;
-  const nTowers = safeNum((m as Record<string, unknown>).nTowersPlaced, safeNum(m.nTowersRequested, 0));
-  const floorCount = safeNum((m as Record<string, unknown>).floorCount, NaN);
-  const buildingHeightM = safeNum((m as Record<string, unknown>).buildingHeightM, NaN);
-  const floors = Number.isFinite(floorCount) ? floorCount : (Number.isFinite(buildingHeightM) ? buildingHeightM : undefined);
-  const roadAccessOk = (m as Record<string, unknown>).roadAccessOk as boolean | undefined;
+  const summary =
+    (scenario?.planResultSummary as { metrics?: Record<string, unknown> }) ??
+    {};
+  const m = (summary.metrics ?? {}) as Record<string, unknown>;
 
   if (!activeScenarioId) {
     return (
@@ -41,32 +93,102 @@ export function PlanningMetricsPanel() {
     );
   }
 
-  const rows: { label: string; value: string | number }[] = [
-    { label: "Plot Area", value: Number.isFinite(plotAreaSqm) ? `${Math.round(plotAreaSqm)} m²` : "—" },
-    { label: "FSI", value: Number.isFinite(fsi) ? fsi.toFixed(2) : "—" },
-    { label: "BUA", value: Number.isFinite(bua) && bua > 0 ? `${Math.round(bua)} m²` : "—" },
-    { label: "Ground Coverage", value: Number.isFinite(groundCoveragePct) ? `${groundCoveragePct.toFixed(1)}%` : "—" },
-    { label: "COP Required", value: Number.isFinite(copRequiredSqm) ? `${Math.round(copRequiredSqm)} m²` : "—" },
-    { label: "COP Provided", value: Number.isFinite(copProvidedSqm) ? `${Math.round(copProvidedSqm)} m²` : (Number.isFinite(copAreaSqm) ? `${Math.round(copAreaSqm)} m²` : "—") },
-    { label: "Calculated Height (m)", value: Number.isFinite(buildingHeightM) ? buildingHeightM.toFixed(1) : "—" },
-    { label: "Number of Towers", value: Number.isFinite(nTowers) ? nTowers : "—" },
-    { label: "Floors", value: floors != null && Number.isFinite(floors) ? floors : "—" },
-    ...(typeof roadAccessOk === "boolean" ? [{ label: "Road Access", value: roadAccessOk ? "OK" : "Fail" as const }] : []),
-  ];
+  /** Parse a metric field to a finite number, or null if absent / non-finite. */
+  const n = (key: string): number | null => {
+    const val = Number(m[key]);
+    return Number.isFinite(val) ? val : null;
+  };
+
+  /** Format a nullable number with optional suffix and decimal places. */
+  const v = (x: number | null, suffix = "", places = 0): string =>
+    x !== null ? x.toFixed(places) + suffix : "—";
+
+  // ── 1. Regulatory limits (from backend, not recomputed) ────────────────────
+  const plotAreaSqm = n("plotAreaSqm");
+  const roadWidthM  = n("roadWidthM");
+  const maxFSI      = n("maxFSI");
+  const maxBUA      = n("maxBUA");
+  const gdcrMaxH    = n("gdcrMaxHeightM");
+
+  // ── 2. Achieved development (from solver result) ───────────────────────────
+  const nTowers      = n("nTowersPlaced");
+  const floorCount   = n("floorCount");
+  const heightM      = n("buildingHeightM");
+  const footprintSqm = n("totalFootprintSqm");
+  const achievedBUA  = n("achievedBUA");
+  const achievedFSI  = n("achievedFSI");
+  // prefer new field; fall back to legacy groundCoveragePct
+  const gcPct = n("achievedGCPct") ?? n("groundCoveragePct");
+
+  // ── 3. Utilization ratios (computed in UI, never from backend) ─────────────
+  const fsiUtil =
+    achievedFSI !== null && maxFSI !== null && maxFSI > 0
+      ? (achievedFSI / maxFSI) * 100
+      : null;
+  const gcUtil  = gcPct !== null ? (gcPct / GC_LIMIT_PCT) * 100 : null;
+  const htUtil  =
+    heightM !== null && gdcrMaxH !== null && gdcrMaxH > 0
+      ? (heightM / gdcrMaxH) * 100
+      : null;
+
+  const hasUtil = fsiUtil !== null || gcUtil !== null || htUtil !== null;
 
   return (
-    <div className="flex flex-col gap-2 rounded border border-neutral-200 bg-white p-3 shadow-sm">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">
+    <div className="flex flex-col gap-3 rounded border border-neutral-200 bg-white p-3 text-xs shadow-sm">
+      <h3 className="text-[10px] font-semibold uppercase tracking-wide text-neutral-600">
         Planning metrics
       </h3>
-      <dl className="grid gap-1 text-sm">
-        {rows.map(({ label, value }) => (
-          <div key={label} className="flex justify-between gap-2">
-            <dt className="text-neutral-600">{label}</dt>
-            <dd className="font-medium text-neutral-900">{value}</dd>
-          </div>
-        ))}
-      </dl>
+
+      {/* ① Regulatory Limits */}
+      <Section title="Regulatory Limits">
+        <Row
+          label="Plot Area"
+          value={plotAreaSqm !== null ? `${Math.round(plotAreaSqm)} m²` : "—"}
+        />
+        <Row label="Road Width"  value={v(roadWidthM, " m")} />
+        <Row label="Max FSI"     value={v(maxFSI, "", 1)} />
+        <Row
+          label="Max BUA"
+          value={maxBUA !== null ? `${Math.round(maxBUA)} m²` : "—"}
+        />
+        <Row label="Max Height"  value={v(gdcrMaxH, " m")} />
+        <Row label="GC Limit"    value="40 %" />
+      </Section>
+
+      {/* ② Achieved Plan */}
+      <Section
+        title="Achieved Plan"
+        titleClass="text-blue-700"
+        borderClass="border-blue-100"
+      >
+        <Row label="Towers"       value={v(nTowers)} />
+        <Row label="Floors"       value={v(floorCount)} />
+        <Row label="Height"       value={v(heightM, " m", 1)} />
+        <Row
+          label="Footprint"
+          value={footprintSqm !== null ? `${Math.round(footprintSqm)} m²` : "—"}
+        />
+        <Row
+          label="BUA"
+          value={achievedBUA !== null ? `${Math.round(achievedBUA)} m²` : "—"}
+        />
+        <Row label="FSI"          value={v(achievedFSI, "", 2)} />
+        <Row label="Ground Cover" value={v(gcPct, "%", 1)} />
+      </Section>
+
+      {/* ③ Utilization */}
+      <Section
+        title="Utilization"
+        titleClass="text-emerald-700"
+        borderClass="border-emerald-100"
+      >
+        {fsiUtil !== null && <UtilRow label="FSI"    pct={fsiUtil} />}
+        {gcUtil  !== null && <UtilRow label="GC"     pct={gcUtil}  />}
+        {htUtil  !== null && <UtilRow label="Height" pct={htUtil}  />}
+        {!hasUtil && (
+          <p className="text-neutral-400">Awaiting plan result…</p>
+        )}
+      </Section>
     </div>
   );
 }
