@@ -120,19 +120,44 @@ def enforce_ground_coverage(
     )
 
     s = math.sqrt(target_area / envelope.area)
-    centroid = envelope.centroid
-    clipped = scale(envelope, xfact=s, yfact=s, origin=centroid)
+    clipped = scale(envelope, xfact=s, yfact=s, origin='centroid')
 
     if clipped.is_empty or not clipped.is_valid:
+        # Centroid scaling can produce degenerate results for highly non-convex
+        # polygons.  Fall back to buffer(-d) bisection in that case.
         logger.warning(
-            "GC enforcement centroid scaling produced invalid polygon; "
-            "returning un-clipped envelope."
+            "GC centroid scaling produced invalid polygon (s=%.4f); "
+            "falling back to buffer bisection.",
+            s,
         )
-        return envelope, round(actual_gc_pct, 2), "OK"
+        lo, hi = 0.0, max(
+            envelope.bounds[2] - envelope.bounds[0],
+            envelope.bounds[3] - envelope.bounds[1],
+        ) / 2.0
+        clipped = envelope
+        for _ in range(20):
+            mid = (lo + hi) / 2.0
+            candidate = envelope.buffer(-mid)
+            if candidate.is_empty:
+                hi = mid
+                continue
+            if candidate.area > target_area:
+                lo = mid
+            else:
+                hi = mid
+                clipped = candidate
+            if (hi - lo) < 1e-4:
+                break
+        if clipped.is_empty:
+            logger.warning(
+                "GC enforcement bisection fallback produced empty polygon; "
+                "returning un-clipped envelope."
+            )
+            return envelope, round(actual_gc_pct, 2), "OK"
 
     final_gc = clipped.area / plot_area * 100.0
     logger.info(
-        "Ground coverage after scaling: %.1f%% (target ≤ %.1f%%, scale_factor=%.4f)",
+        "Ground coverage after enforcement: %.1f%% (target ≤ %.1f%%, scale_factor=%.4f)",
         final_gc, max_gc_pct, s,
     )
     return clipped, round(final_gc, 2), "CLIPPED"

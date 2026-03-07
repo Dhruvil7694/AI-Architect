@@ -319,8 +319,8 @@ def _search_best_tower_layout(
     # the height solver output.  The height solver is constrained by current
     # envelope geometry; the GDCR cap represents the statutory maximum for
     # the road width.  The FSI filter below discards over-BUA configurations.
-    search_ceiling_m = max(building_height_m, gdcr_max_height_m) if gdcr_max_height_m > 0 else building_height_m
-    max_floors = int(search_ceiling_m / storey_height_m) if storey_height_m > 0 else 0
+    height_ceiling = gdcr_max_height_m if gdcr_max_height_m > building_height_m else building_height_m
+    max_floors = int(height_ceiling / storey_height_m) if storey_height_m > 0 else 0
     floor_candidates = _candidate_floor_counts(max_floors)
 
     best_footprints: List[FootprintCandidate] = []
