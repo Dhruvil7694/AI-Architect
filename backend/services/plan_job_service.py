@@ -343,9 +343,10 @@ def _search_best_tower_layout(
     # Cap max_floors at the FSI-derived ceiling: configurations with more floors
     # than this will always be rejected by the FSI filter below, so searching them
     # wastes time proportional to n_floors × MAX_TOWERS × n_zones × grid_size.
-    # max_envelope_footprint_sqm is a rough upper bound (40 % GC of the envelope).
+    # final_envelope.area is in DXF square feet — convert to sqm before comparing
+    # with max_bua_sqm (which is already in m²).
     if max_bua_sqm > 0.0 and storey_height_m > 0 and max_floors > 0:
-        max_envelope_footprint_sqm = final_envelope.area * 0.40  # conservative GC cap
+        max_envelope_footprint_sqm = sqft_to_sqm(final_envelope.area) * 0.40
         if max_envelope_footprint_sqm > 0:
             max_floors_for_fsi = max(1, int(max_bua_sqm / max_envelope_footprint_sqm))
             if max_floors_for_fsi < max_floors:
@@ -827,6 +828,7 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
             "nTowersRequested": n_towers_requested,
             "nTowersPlaced": n_towers_placed,
             "spacingRequiredM": float(required_spacing_m(chosen_building_height_m)),
+            "maxFSI": round(float(max_fsi), 3) if isinstance(max_fsi, (int, float)) else None,
             "achievedFSI": round(achieved_fsi, 4),
             "achievedGCPct": round(achieved_gc_pct, 2),
             "totalFootprintSqm": round(total_footprint_sqm, 2),
