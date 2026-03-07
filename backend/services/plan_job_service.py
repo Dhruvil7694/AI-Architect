@@ -281,6 +281,7 @@ def _search_best_tower_layout(
     tower_pref: Any,
     storey_height_m: float,
     max_bua_sqm: float,
+    gdcr_max_height_m: float = 0.0,
 ) -> Tuple[List[FootprintCandidate], int, int, int]:
     """
     Evaluate multiple (floors, n_towers) configurations and return the best layout.
@@ -314,7 +315,12 @@ def _search_best_tower_layout(
     if storey_height_m <= 0:
         storey_height_m = STOREY_HEIGHT_M or 3.0
 
-    max_floors = int(building_height_m / storey_height_m) if storey_height_m > 0 else 0
+    # Use the GDCR road-width cap as the floor search ceiling when it exceeds
+    # the height solver output.  The height solver is constrained by current
+    # envelope geometry; the GDCR cap represents the statutory maximum for
+    # the road width.  The FSI filter below discards over-BUA configurations.
+    search_ceiling_m = max(building_height_m, gdcr_max_height_m) if gdcr_max_height_m > 0 else building_height_m
+    max_floors = int(search_ceiling_m / storey_height_m) if storey_height_m > 0 else 0
     floor_candidates = _candidate_floor_counts(max_floors)
 
     best_footprints: List[FootprintCandidate] = []
@@ -498,7 +504,14 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
             building_height_m = 30.0
             height_controlling_constraint = "FALLBACK"
 
-    road_edges, _ = detect_road_edges_with_meta(geom, None)
+    # Prefer Plot.road_edges if set (assigned from DXF — more accurate than
+    # the longest-edge detector fallback used when the field is blank).
+    _road_edges_str = getattr(plot, "road_edges", "") or ""
+    if _road_edges_str.strip():
+        road_edges = [int(x) for x in _road_edges_str.split(",") if x.strip()]
+        logger.info("Using Plot.road_edges field: %s", road_edges)
+    else:
+        road_edges, _ = detect_road_edges_with_meta(geom, None)
 
     env = compute_envelope(
         plot_wkt=geom.wkt,
@@ -599,15 +612,27 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
         logger.warning("FSI debug: failed to read GDCR FSI config: %s", e)
         max_bua_sqm = 0.0
 
+    # GDCR road-width cap: upper bound on building height from the road width
+    # table, independent of envelope geometry.  Used to raise the floor search
+    # ceiling beyond what the height solver returns (which is constrained by
+    # the current envelope footprint area).
+    gdcr_max_height_m = 0.0
+    try:
+        from architecture.regulatory_accessors import get_max_permissible_height_by_road_width
+        gdcr_max_height_m = float(get_max_permissible_height_by_road_width(road_width_m) or 0.0)
+    except Exception as e:
+        logger.warning("Could not fetch GDCR road-width height cap: %s", e)
+
     # Debug logging for development configuration diagnostics (pre-solver).
     logger.warning(
         "DEV_CONFIG_DEBUG: plot_area_sqm=%.3f road_width_m=%.3f max_fsi=%s "
-        "max_bua_sqm=%.3f max_height_m=%.3f storey_height_m=%.3f",
+        "max_bua_sqm=%.3f max_height_m=%.3f gdcr_max_height_m=%.3f storey_height_m=%.3f",
         plot_area_sqm,
         road_width_m,
         f"{max_fsi:.3f}" if isinstance(max_fsi, (int, float)) else "None",
         max_bua_sqm,
         building_height_m,
+        gdcr_max_height_m,
         storey_height_m,
     )
 
@@ -621,6 +646,7 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
         tower_pref=tower_pref,
         storey_height_m=storey_height_m,
         max_bua_sqm=max_bua_sqm,
+        gdcr_max_height_m=gdcr_max_height_m,
     )
 
     # ── Pipeline validation: towers ⊂ envelope ──────────────────────────────────
@@ -652,14 +678,28 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
             )
 
     # ── Metrics: achieved BUA, FSI, floor count, COP, parking ───────────────────
-    achieved_bua_sqm = 0.0
+    total_footprint_sqm = 0.0
     for fp in all_footprints:
-        area_sqft = getattr(fp, "area_sqft", 0.0) or 0.0
-        achieved_bua_sqm += sqft_to_sqm(area_sqft) * max(1, floor_count)
+        total_footprint_sqm += sqft_to_sqm(getattr(fp, "area_sqft", 0.0) or 0.0)
+    achieved_bua_sqm = total_footprint_sqm * max(1, floor_count)
     achieved_fsi = (achieved_bua_sqm / plot_area_sqm) if plot_area_sqm > 0 else 0.0
+    achieved_gc_pct = (total_footprint_sqm / plot_area_sqm * 100.0) if plot_area_sqm > 0 else 0.0
 
     # Height implied by chosen floor count (may be below regulatory maximum).
     chosen_building_height_m = float(floor_count * storey_height_m) if floor_count and storey_height_m else building_height_m
+
+    logger.warning(
+        "GC_DEBUG: plot_area_sqm=%.3f total_footprint_sqm=%.3f "
+        "actual_gc=%.2f%% target_gc=%.1f%% floor_count=%d achieved_fsi=%.4f "
+        "gdcr_max_height_m=%.1f",
+        plot_area_sqm,
+        total_footprint_sqm,
+        achieved_gc_pct,
+        float(env.ground_coverage_pct or 0.0),
+        floor_count,
+        achieved_fsi,
+        gdcr_max_height_m,
+    )
 
     # ── Tower geometry + spacing visuals ────────────────────────────────────────
     tower_geoms: List[Dict[str, Any]] = []
@@ -718,6 +758,9 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
             "nTowersPlaced": n_towers_placed,
             "spacingRequiredM": float(required_spacing_m(chosen_building_height_m)),
             "achievedFSI": round(achieved_fsi, 4),
+            "achievedGCPct": round(achieved_gc_pct, 2),
+            "totalFootprintSqm": round(total_footprint_sqm, 2),
+            "gdcrMaxHeightM": round(gdcr_max_height_m, 2),
             "achievedBUA": round(achieved_bua_sqm, 2),
             "maxBUA": round(max_bua_sqm, 2),
             "floorCount": floor_count,

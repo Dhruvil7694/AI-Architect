@@ -30,16 +30,14 @@ with the client.
 from __future__ import annotations
 
 import logging
+import math
 
+from shapely.affinity import scale
 from shapely.geometry import Polygon
 
 from rules_engine.rules.loader import get_gdcr_config
 
 logger = logging.getLogger(__name__)
-
-# Bisection parameters for GC enforcement
-_BISECT_ITERATIONS = 20
-_BISECT_TOLERANCE  = 1e-4   # DXF feet (< 0.03 mm — more than adequate)
 
 
 def _gdcr_max_gc_pct() -> float | None:
@@ -110,43 +108,31 @@ def enforce_ground_coverage(
         )
         return envelope, round(actual_gc_pct, 2), "OK"
 
-    # ── Enforce: bisect to find minimum additional buffer distance ─────────────
+    # ── Enforce: centroid scaling to target area ────────────────────────────────
+    # buffer(-d) bisection collapses irregular polygons disproportionately
+    # (a 56% envelope shrinks to 14.5% instead of 40%).  Centroid scaling is
+    # predictable: area scales as s², so s = sqrt(target/current) is exact.
     target_area = (max_gc_pct / 100.0) * plot_area
     logger.info(
         "Ground coverage %.1f%% exceeds limit %.1f%%. "
-        "Target area: %.1f sq.ft. Bisecting additional buffer.",
+        "Target area: %.1f sq.ft. Applying centroid scaling.",
         actual_gc_pct, max_gc_pct, target_area,
     )
 
-    lo, hi = 0.0, max(envelope.bounds[2] - envelope.bounds[0],
-                       envelope.bounds[3] - envelope.bounds[1]) / 2.0
+    s = math.sqrt(target_area / envelope.area)
+    centroid = envelope.centroid
+    clipped = scale(envelope, xfact=s, yfact=s, origin=centroid)
 
-    clipped = envelope
-    for _ in range(_BISECT_ITERATIONS):
-        mid = (lo + hi) / 2.0
-        candidate = envelope.buffer(-mid)
-        if candidate.is_empty:
-            hi = mid
-            continue
-        if candidate.area > target_area:
-            lo = mid
-        else:
-            hi = mid
-            clipped = candidate
-        if (hi - lo) < _BISECT_TOLERANCE:
-            break
-
-    if clipped.is_empty:
-        # Extreme case: even maximum buffer empties the polygon — return original
+    if clipped.is_empty or not clipped.is_valid:
         logger.warning(
-            "GC enforcement bisection produced empty polygon; "
+            "GC enforcement centroid scaling produced invalid polygon; "
             "returning un-clipped envelope."
         )
         return envelope, round(actual_gc_pct, 2), "OK"
 
     final_gc = clipped.area / plot_area * 100.0
     logger.info(
-        "Ground coverage after clipping: %.1f%% (target ≤ %.1f%%)",
-        final_gc, max_gc_pct,
+        "Ground coverage after scaling: %.1f%% (target ≤ %.1f%%, scale_factor=%.4f)",
+        final_gc, max_gc_pct, s,
     )
     return clipped, round(final_gc, 2), "CLIPPED"
