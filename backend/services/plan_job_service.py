@@ -59,6 +59,41 @@ def _cop_required_sqm(plot_area_sqm: float) -> float:
     return max(by_fraction, min_sqm) if min_sqm > 0 else by_fraction
 
 
+def _precompute_zone_footprints(
+    zones: List[Any],
+    building_height_m: float,
+) -> List[List[FootprintCandidate]]:
+    """
+    Generate footprint candidates for each zone at a given building height.
+
+    Extracted so that _search_best_tower_layout can call this ONCE per
+    (floor-count, zone) combination and reuse the result across all tower
+    counts.  Without caching, the 7×7 grid optimizer runs O(MAX_TOWERS) times
+    per zone per floor count — the dominant cost in the configuration search.
+    """
+    zone_footprints: List[List[FootprintCandidate]] = []
+    for zone in zones:
+        try:
+            candidates = generate_footprint_candidates_in_zone(
+                zone, building_height_m, top_n=3
+            )
+            if candidates:
+                zone_footprints.append(candidates)
+                continue
+            placement = compute_placement(
+                envelope_wkt=zone.wkt,
+                building_height_m=building_height_m,
+                n_towers=1,
+            )
+            zone_footprints.append(
+                list(placement.footprints) if placement.footprints else []
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Zone precompute failed: %s", e)
+            zone_footprints.append([])
+    return zone_footprints
+
+
 def _place_towers_by_zone(
     final_envelope: Polygon,
     zone_result: Optional[Any],
@@ -66,6 +101,7 @@ def _place_towers_by_zone(
     building_height_m: float,
     road_corridor_geom: Optional[Any] = None,
     road_access_max_distance_m: float = DEFAULT_ROAD_ACCESS_MAX_DISTANCE_M,
+    precomputed_zone_footprints: Optional[List[List[FootprintCandidate]]] = None,
 ) -> Tuple[List[FootprintCandidate], int]:
     """
     Zone-driven placement with candidate layouts and scoring.
@@ -95,31 +131,13 @@ def _place_towers_by_zone(
     # Floors are assumed uniform across towers for a given building_height_m.
     floors = max(1.0, building_height_m / STOREY_HEIGHT_M) if STOREY_HEIGHT_M > 0 else 1.0
 
-    # Pre-place candidate towers per zone (cache by zone index) so we can score combinations.
-    # Use footprint optimization: generate multiple width×depth sizes (top-N per zone by area).
-    zone_footprints: List[List[FootprintCandidate]] = []
-    for zone in zones:
-        try:
-            candidates = generate_footprint_candidates_in_zone(
-                zone, building_height_m, top_n=3
-            )
-            if candidates:
-                zone_footprints.append(candidates)
-                continue
-
-            # Safe fallback: single-tower placement inside zone using the full packer.
-            placement = compute_placement(
-                envelope_wkt=zone.wkt,
-                building_height_m=building_height_m,
-                n_towers=1,
-            )
-            if placement.footprints:
-                zone_footprints.append(list(placement.footprints))
-            else:
-                zone_footprints.append([])
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Zone placement failed: %s", e)
-            zone_footprints.append([])
+    # Use precomputed zone footprints if the caller cached them; otherwise compute now.
+    # Precomputation is done once per floor-height in _search_best_tower_layout so the
+    # expensive 7×7 grid optimizer is not repeated for every (floors, n_towers) pair.
+    if precomputed_zone_footprints is not None:
+        zone_footprints = precomputed_zone_footprints
+    else:
+        zone_footprints = _precompute_zone_footprints(zones, building_height_m)
 
     # Single tower: pick the zone that gives the largest BUA
     if k == 1:
@@ -318,10 +336,30 @@ def _search_best_tower_layout(
     # Use the GDCR road-width cap as the floor search ceiling when it exceeds
     # the height solver output.  The height solver is constrained by current
     # envelope geometry; the GDCR cap represents the statutory maximum for
-    # the road width.  The FSI filter below discards over-BUA configurations.
+    # the road width.
     height_ceiling = gdcr_max_height_m if gdcr_max_height_m > building_height_m else building_height_m
     max_floors = int(height_ceiling / storey_height_m) if storey_height_m > 0 else 0
+
+    # Cap max_floors at the FSI-derived ceiling: configurations with more floors
+    # than this will always be rejected by the FSI filter below, so searching them
+    # wastes time proportional to n_floors × MAX_TOWERS × n_zones × grid_size.
+    # max_envelope_footprint_sqm is a rough upper bound (40 % GC of the envelope).
+    if max_bua_sqm > 0.0 and storey_height_m > 0 and max_floors > 0:
+        max_envelope_footprint_sqm = final_envelope.area * 0.40  # conservative GC cap
+        if max_envelope_footprint_sqm > 0:
+            max_floors_for_fsi = max(1, int(max_bua_sqm / max_envelope_footprint_sqm))
+            if max_floors_for_fsi < max_floors:
+                logger.info(
+                    "FSI ceiling caps floor search: gdcr_max=%d → fsi_max=%d floors",
+                    max_floors, max_floors_for_fsi,
+                )
+                max_floors = max_floors_for_fsi
+
     floor_candidates = _candidate_floor_counts(max_floors)
+
+    # Pre-compute zone list once (same across all floor / tower iterations).
+    _raw_zones = (zone_result.candidate_zones or []) if zone_result else []
+    _raw_zones = [z for z in _raw_zones if z is not None and not z.is_empty and z.is_valid]
 
     best_footprints: List[FootprintCandidate] = []
     best_bua_sqm = 0.0
@@ -337,6 +375,11 @@ def _search_best_tower_layout(
         if candidate_height_m <= 0:
             continue
 
+        # Pre-compute zone footprints ONCE per floor-height, then reuse for all
+        # tower counts.  This eliminates the O(MAX_TOWERS) repetition of the
+        # expensive 7×7 grid optimizer that dominated wall-clock time.
+        cached_zone_fps = _precompute_zone_footprints(_raw_zones, candidate_height_m) if _raw_zones else None
+
         for n in range(1, candidate_max_towers + 1):
             footprints, n_placed = _place_towers_by_zone(
                 final_envelope=final_envelope,
@@ -344,6 +387,7 @@ def _search_best_tower_layout(
                 n_towers=n,
                 building_height_m=candidate_height_m,
                 road_corridor_geom=road_corridor_geom,
+                precomputed_zone_footprints=cached_zone_fps,
             )
             if not footprints or n_placed <= 0:
                 continue
@@ -369,12 +413,14 @@ def _search_best_tower_layout(
 
     # Fallback: behave like the legacy path using the maximum candidate tower count
     # and max_floors derived from the height solver.
+    fallback_cached = _precompute_zone_footprints(_raw_zones, building_height_m) if _raw_zones else None
     footprints, n_placed = _place_towers_by_zone(
         final_envelope=final_envelope,
         zone_result=zone_result,
         n_towers=candidate_max_towers,
         building_height_m=building_height_m,
         road_corridor_geom=road_corridor_geom,
+        precomputed_zone_footprints=fallback_cached,
     )
     if not footprints or n_placed <= 0:
         return [], 0, candidate_max_towers, max_floors or 0

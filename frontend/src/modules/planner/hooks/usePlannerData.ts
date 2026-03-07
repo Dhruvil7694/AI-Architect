@@ -34,9 +34,10 @@ export function usePlanJobStatus(jobId: string | null) {
     enabled: Boolean(jobId),
     refetchInterval: (query) => {
       const data = query.state.data;
-      return data && (data.status === "pending" || data.status === "running")
-        ? 1500
-        : false;
+      // Before the first response arrives (data is undefined), keep polling so the
+      // status is fetched immediately and the interval is active from the start.
+      if (!data) return 1500;
+      return data.status === "pending" || data.status === "running" ? 1500 : false;
     },
   });
 }
