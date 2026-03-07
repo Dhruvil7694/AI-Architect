@@ -60,17 +60,35 @@ export function PlannerCanvas({
   const metrics = summary.metrics ?? {};
 
   if ((!geometryModel || geometryModel.features.length === 0) && isLoading) {
-    const progressText =
-      typeof loadingProgress === "number"
-        ? ` (${Math.round(loadingProgress)}%)`
-        : "";
+    // Show actual progress when available (backend reports 10 = running, 100 = done).
+    // Fall back to an indeterminate shimmer while the first status poll is in flight.
+    const hasProgress =
+      typeof loadingProgress === "number" && loadingProgress > 0;
     return (
       <div className="flex h-full w-full flex-1 items-center justify-center rounded-md border border-dashed border-neutral-300 bg-neutral-50">
-        <div className="flex flex-col items-center gap-2">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
-          <p className="text-xs text-neutral-600">
-            Generating plan…{progressText}
-          </p>
+        <div className="flex w-52 flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700" />
+          <div className="w-full text-center">
+            <p className="mb-2 text-xs font-medium text-neutral-700">
+              Generating plan…
+            </p>
+            {/* Progress bar — indeterminate shimmer when progress unknown */}
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200">
+              {hasProgress ? (
+                <div
+                  className="h-full rounded-full bg-blue-500 transition-all duration-700"
+                  style={{ width: `${Math.max(8, loadingProgress!)}%` }}
+                />
+              ) : (
+                <div className="h-full w-full animate-pulse rounded-full bg-blue-400" />
+              )}
+            </div>
+            <p className="mt-1.5 text-[10px] text-neutral-400">
+              {hasProgress
+                ? `${Math.round(loadingProgress!)}% — Computing layout`
+                : "Submitting job…"}
+            </p>
+          </div>
         </div>
       </div>
     );
