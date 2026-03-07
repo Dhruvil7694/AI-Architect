@@ -48,6 +48,9 @@ STAIR_W         = 1.20  # staircase clear width (Table 13.2: ≥ 1.0 m for res. 
 STAIR_D         = 3.50  # depth for straight flight with mid-landing
 STAIR_WALL      = 0.15  # separation wall between two stair wells
 MIN_UNIT_DEPTH  = 5.00  # minimum meaningful unit depth (m)
+# Core sizing constraint: core must leave at least this much L on each side for units.
+# Prevents the GDCR lift-count formula from producing a core that swallows the floor.
+MIN_UNIT_BAND_M = 5.00  # metres — minimum unit-band length on each side of core
 # Clearances (§13.1.7)
 CLEARANCE_HABITABLE_M = 2.90  # habitable rooms: ≥ 2.9 m between finished floor levels
 CLEARANCE_SERVICE_M   = 2.10  # corridors / bathrooms / stair cabins: ≥ 2.1 m
@@ -80,17 +83,64 @@ def _stair_width_required(height_m: float) -> float:
 
 # ─── Geometry helpers ─────────────────────────────────────────────────────────
 
+def _principal_axis(coords: List[List[float]]) -> Tuple[float, float, float, float]:
+    """
+    Determine the L (long) axis unit vector from the longest edge of the polygon.
+    Returns (lx, ly, sx, sy) — unit vectors for L and S axes in DXF space.
+    Always orients L so it points in the +X half-plane (or +Y when vertical),
+    giving a canonical direction for back-projection.
+    """
+    ring = coords[:-1] if len(coords) > 1 and coords[0] == coords[-1] else coords
+    max_len, lx, ly = 0.0, 1.0, 0.0
+    for i in range(len(ring)):
+        dx = ring[(i + 1) % len(ring)][0] - ring[i][0]
+        dy = ring[(i + 1) % len(ring)][1] - ring[i][1]
+        length = math.hypot(dx, dy)
+        if length > max_len:
+            max_len, lx, ly = length, dx / length, dy / length
+    # Canonical direction: lx ≥ 0; if lx == 0 then ly ≥ 0
+    if lx < 0 or (abs(lx) < 1e-9 and ly < 0):
+        lx, ly = -lx, -ly
+    # S axis is 90° counter-clockwise from L
+    sx, sy = -ly, lx
+    return lx, ly, sx, sy
+
+
+def _point_in_polygon(px: float, py: float, ring: List[List[float]]) -> bool:
+    """Ray-casting point-in-polygon test (2-D, DXF coordinate space)."""
+    inside = False
+    n = len(ring)
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if ((yi > py) != (yj > py)) and (px < (xj - xi) * (py - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
 def _rect(
     l0: float, s0: float, l1: float, s1: float,
-    rotated: bool, ox: float, oy: float,
+    origin: Tuple[float, float],
+    l_dxf: Tuple[float, float],
+    s_dxf: Tuple[float, float],
 ) -> Dict:
-    """Rectangle polygon in DXF coordinate space from local (L, S) coords."""
+    """
+    Rectangle polygon in DXF coordinate space from local (L, S) metre coords.
+
+    origin : DXF point corresponding to L=0, S=0
+    l_dxf  : DXF displacement per 1 metre along L axis
+    s_dxf  : DXF displacement per 1 metre along S axis
+    """
+    ox, oy = origin
+    lx, ly = l_dxf
+    sx, sy = s_dxf
+
     def pt(l: float, s: float) -> List[float]:
-        return (
-            [ox + s * M_TO_DXF, oy + l * M_TO_DXF] if rotated
-            else [ox + l * M_TO_DXF, oy + s * M_TO_DXF]
-        )
-    corners = [pt(l0,s0), pt(l1,s0), pt(l1,s1), pt(l0,s1), pt(l0,s0)]
+        return [ox + l * lx + s * sx, oy + l * ly + s * sy]
+
+    corners = [pt(l0, s0), pt(l1, s0), pt(l1, s1), pt(l0, s1), pt(l0, s0)]
     return {"type": "Polygon", "coordinates": [corners]}
 
 
@@ -145,26 +195,48 @@ def generate_floor_plan(
     footprint_geojson : GeoJSON Polygon in DXF coordinate space (1 unit = 1 ft)
     Returns dict: { status, layout (GeoJSON FeatureCollection), metrics }
     """
-    # ── 1. Parse footprint bounding box ───────────────────────────────────────
+    # ── 1. Parse footprint and compute principal-axis coordinate frame ─────────
     try:
         outer = (footprint_geojson.get("coordinates") or [[]])[0]
         if len(outer) < 4:
             return {"status": "error", "error": "Footprint has < 4 vertices"}
-        xs = [float(c[0]) for c in outer]
-        ys = [float(c[1]) for c in outer]
-        minx, maxx = min(xs), max(xs)
-        miny, maxy = min(ys), max(ys)
+        outer = [[float(c[0]), float(c[1])] for c in outer]
     except Exception as e:
         return {"status": "error", "error": f"Could not parse footprint: {e}"}
 
-    W_m = (maxx - minx) * DXF_TO_M
-    D_m = (maxy - miny) * DXF_TO_M
-    footprint_sqm = W_m * D_m
+    # Principal axis: longest polygon edge → L axis; perpendicular → S axis.
+    # This correctly handles rotated / non-axis-aligned towers.
+    ax_lx, ax_ly, ax_sx, ax_sy = _principal_axis(outer)
 
-    # L = corridor (long) axis, S = unit-stack (short) axis
-    rotated = D_m > W_m
-    L_m     = max(W_m, D_m)
-    SHORT_m = min(W_m, D_m)
+    # Project all polygon vertices onto L and S axes (in DXF units)
+    l_projs = [c[0] * ax_lx + c[1] * ax_ly for c in outer]
+    s_projs = [c[0] * ax_sx + c[1] * ax_sy for c in outer]
+    l_min, l_max = min(l_projs), max(l_projs)
+    s_min, s_max = min(s_projs), max(s_projs)
+
+    # Oriented bounding rectangle dimensions in metres
+    L_dxf   = l_max - l_min   # DXF units along long axis
+    S_dxf   = s_max - s_min   # DXF units along short axis
+    L_m     = L_dxf * DXF_TO_M
+    SHORT_m = S_dxf * DXF_TO_M
+
+    # Shoelace area of actual polygon (m²) — more accurate than bounding box
+    n_v = len(outer)
+    shoelace = sum(
+        outer[i][0] * outer[(i + 1) % n_v][1] - outer[(i + 1) % n_v][0] * outer[i][1]
+        for i in range(n_v)
+    )
+    footprint_sqm = abs(shoelace) / 2.0 * (DXF_TO_M ** 2)
+
+    # Origin in DXF space: the corner that corresponds to (L=0, S=0) in local frame.
+    # Back-projection: dxf = l_min * l_unit + s_min * s_unit
+    origin_x = l_min * ax_lx + s_min * ax_sx
+    origin_y = l_min * ax_ly + s_min * ax_sy
+    origin: Tuple[float, float] = (origin_x, origin_y)
+
+    # DXF displacement vectors per 1 metre along each local axis
+    l_dxf_pm: Tuple[float, float] = (ax_lx * M_TO_DXF, ax_ly * M_TO_DXF)
+    s_dxf_pm: Tuple[float, float] = (ax_sx * M_TO_DXF, ax_sy * M_TO_DXF)
 
     # ── 2. GDCR core requirements ─────────────────────────────────────────────
     # Estimate total dwelling units for GDCR lift sizing (§13.12.2):
@@ -173,15 +245,23 @@ def generate_floor_plan(
     est_units_floor = max(2, int(footprint_sqm * 0.65 / avg_unit_sqm))
     est_total_units = est_units_floor * max(1, n_floors)
 
-    n_lifts  = _n_lifts_required(building_height_m, est_total_units)
-    n_stairs = _n_stairs(building_height_m)
+    n_lifts_gdcr     = _n_lifts_required(building_height_m, est_total_units)
+    n_stairs         = _n_stairs(building_height_m)
     stair_w_required = _stair_width_required(building_height_m)
 
-    # Core length along L (all components in a row)
-    stair_total_L = n_stairs * STAIR_W + max(0, n_stairs - 1) * STAIR_WALL
+    # ── Core overflow guard ───────────────────────────────────────────────────
+    # The GDCR formula (ceil(total_units/30)) can yield many lifts for large
+    # towers, making the core longer than the floor plate.  We must leave at
+    # least MIN_UNIT_BAND_M on EACH side of the core for residential units.
+    stair_total_L     = n_stairs * STAIR_W + max(0, n_stairs - 1) * STAIR_WALL
+    available_lift_L  = max(0.0, L_m - 2.0 * MIN_UNIT_BAND_M - stair_total_L - 0.5)
+    n_lifts_fit       = max(0, int(available_lift_L / LIFT_SHAFT_W))
+    lift_capped       = n_lifts_fit < n_lifts_gdcr
+    n_lifts           = min(n_lifts_gdcr, n_lifts_fit)
+
     lift_total_L  = n_lifts  * LIFT_SHAFT_W
     core_gap      = 0.5 if n_lifts > 0 and n_stairs > 0 else 0.0
-    core_len      = max(stair_total_L + core_gap + lift_total_L, 2.5)
+    core_len      = max(stair_total_L + core_gap + lift_total_L, stair_total_L, 2.5)
 
     # ── 3. Key S-positions (all in local metres) ──────────────────────────────
     s_mid = SHORT_m / 2.0
@@ -228,13 +308,15 @@ def generate_floor_plan(
     unit_mix_clean = [u.upper().replace(" ", "") for u in (unit_mix or ["2BHK"])]
     features: List[Dict] = []
 
-    def R(l0, s0, l1, s1):
-        return _rect(l0, s0, l1, s1, rotated, minx, miny)
+    # Shorthand: rectangle in local-metre coords → DXF GeoJSON polygon
+    def R(l0: float, s0: float, l1: float, s1: float) -> Dict:
+        return _rect(l0, s0, l1, s1, origin, l_dxf_pm, s_dxf_pm)
 
-    # ── Footprint background ──────────────────────────────────────────────────
+    # ── Footprint background — use ACTUAL polygon, not bounding box ───────────
+    # This correctly renders L-shaped, rotated, or irregular tower footprints.
     features.append({
         "type": "Feature", "id": "footprint_bg",
-        "geometry": R(0, 0, L_m, SHORT_m),
+        "geometry": footprint_geojson,   # original DXF polygon
         "properties": {
             "layer": "footprint_bg",
             "area_sqm": round(footprint_sqm, 2),
@@ -384,6 +466,18 @@ def generate_floor_plan(
             for ui in range(n_here):
                 ul0 = region_l0 + ui * uw_actual
                 ul1 = ul0 + uw_actual
+
+                # ── Polygon containment check ─────────────────────────────────
+                # Convert unit centroid from local (L_m, S_m) to DXF (x, y)
+                # and verify it lies inside the actual tower polygon.
+                # This filters out units that overflow irregular / rotated shapes.
+                cl_m = (ul0 + ul1) / 2.0
+                cs_m = (side["s0"] + side["s1"]) / 2.0
+                cx_dxf = origin[0] + cl_m * l_dxf_pm[0] + cs_m * s_dxf_pm[0]
+                cy_dxf = origin[1] + cl_m * l_dxf_pm[1] + cs_m * s_dxf_pm[1]
+                if not _point_in_polygon(cx_dxf, cy_dxf, outer):
+                    continue   # centroid outside polygon — skip this bay
+
                 unit_seq += 1
                 gross_sqm  = uw_actual * depth
                 carpet_sqm = gross_sqm * 0.82
@@ -437,8 +531,15 @@ def generate_floor_plan(
         # §13.12.2 — Lifts
         "lift_required":             building_height_m > 10.0,
         "lift_provided":             n_lifts,
+        "lift_required_gdcr":        n_lifts_gdcr,
         "lift_required_by_height":   2 if building_height_m > 25.0 else (1 if building_height_m > 10.0 else 0),
         "lift_required_by_units":    n_lifts_req_actual,
+        "lift_capped":               lift_capped,
+        "lift_cap_reason":           (
+            f"Core would overflow floor plate ({L_m:.1f} m); "
+            f"GDCR requires {n_lifts_gdcr} lifts but only {n_lifts} fit. "
+            f"Floor plate too short — consider increasing tower length."
+        ) if lift_capped else None,
         "lift_ok":                   n_lifts >= n_lifts_req_actual,
         "fire_lift_required":        fire_lift_required,
         "fire_lift_provided":        fire_lift_provided,
