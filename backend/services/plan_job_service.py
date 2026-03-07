@@ -609,7 +609,15 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
             road_result.road_width_dxf,
         )
         for poly in corridors:
-            pg = geometry_to_geojson(poly)
+            # Clip each corridor to the plot boundary so it never extends outside
+            # the cadastral boundary when rendered on the frontend.
+            try:
+                clipped = poly.intersection(plot_polygon)
+            except Exception:
+                clipped = poly
+            if clipped is None or clipped.is_empty:
+                continue
+            pg = geometry_to_geojson(clipped)
             if pg:
                 road_corridors_geojson.append(pg)
         if corridors:

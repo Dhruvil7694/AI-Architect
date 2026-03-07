@@ -23,10 +23,10 @@ export function TowerZoneLayer({
           key={feature.id}
           feature={feature}
           viewTransform={viewTransform}
-          fill="rgba(234,179,8,0.15)"
-          stroke="#ca8a04"
+          fill="rgba(254,243,199,0.45)"
+          stroke="#f59e0b"
           strokeWidth={1}
-          strokeDasharray="3 2"
+          strokeDasharray="4 2"
         />
       ))}
     </>

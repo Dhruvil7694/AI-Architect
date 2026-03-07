@@ -23,10 +23,10 @@ export function SetbackLayer({
           key={feature.id}
           feature={feature}
           viewTransform={viewTransform}
-          fill="none"
-          stroke="#6ee7b7"
+          fill="rgba(209,250,229,0.15)"
+          stroke="#34d399"
           strokeWidth={1}
-          strokeDasharray="2 2"
+          strokeDasharray="3 3"
         />
       ))}
     </>

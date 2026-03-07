@@ -84,10 +84,12 @@ const defaultLayerVisibility: PlannerLayerVisibility = {
   cop: true,
   copMargin: true,
   internalRoads: true,
-  roadCorridors: true,
+  // Road corridors and spacing lines are visual noise at default zoom —
+  // show them only when the user explicitly enables them.
+  roadCorridors: false,
   towerZones: true,
   towerFootprints: true,
-  spacingLines: true,
+  spacingLines: false,
   labels: true,
   buildableEnvelope: false,
   copCandidateZones: false,

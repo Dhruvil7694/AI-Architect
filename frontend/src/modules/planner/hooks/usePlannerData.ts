@@ -98,9 +98,10 @@ export function useGeneratePlan() {
       if (!selectedPlotIdCurrent) return;
 
       const jobId = response.jobId;
+      const scenarioNumber = usePlannerStore.getState().scenarios.length + 1;
       addScenario({
         id: jobId,
-        label: `Scenario ${jobId}`,
+        label: `Scenario ${scenarioNumber}`,
         plotId: selectedPlotIdCurrent,
         inputs,
         planResultSummary: { status: "pending" },
