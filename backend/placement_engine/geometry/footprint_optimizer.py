@@ -150,7 +150,7 @@ def generate_footprint_candidates_in_zone(
     width_values = [max_width_m - i * step_m for i in range(n_w)]
     depth_values = [max_depth_m - j * step_m for j in range(n_d)]
 
-    centres = _sample_centers(zone, prepared_zone, points_per_axis=3)
+    centres = _sample_centers(zone, prepared_zone, points_per_axis=7)
 
     candidates: List[FootprintCandidate] = []
 
