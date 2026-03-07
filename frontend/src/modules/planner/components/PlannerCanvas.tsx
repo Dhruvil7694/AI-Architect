@@ -19,6 +19,7 @@ import {
   TowerZoneLayer,
   TowerLayer,
   SpacingLayer,
+  AnnotationLayer,
   BuildableEnvelopeLayer,
   CopCandidateZonesLayer,
   RoadNetworkLayer,
@@ -225,6 +226,16 @@ export function PlannerCanvas({
               features={grouped.spacingLines ?? []}
               viewTransform={viewTransform}
               visible={!!layerVisibility.spacingLines}
+            />
+            <AnnotationLayer
+              visible={!!layerVisibility.labels}
+              viewTransform={viewTransform}
+              plotFeatures={grouped.plotBoundary ?? []}
+              envelopeFeatures={grouped.envelope ?? []}
+              copFeatures={grouped.cop ?? []}
+              towerZoneFeatures={grouped.towerZones ?? []}
+              towerFeatures={grouped.towerFootprints ?? []}
+              metrics={metrics}
             />
 
             {debugMode && (

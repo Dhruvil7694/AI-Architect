@@ -25,10 +25,10 @@ export function EnvelopeLayer({
           key={feature.id}
           feature={feature}
           viewTransform={viewTransform}
-          fill="rgba(59,130,246,0.08)"
-          stroke="#3b82f6"
-          strokeWidth={1}
-          strokeDasharray="4 2"
+          fill="rgba(251,243,219,0.55)"
+          stroke="#d97706"
+          strokeWidth={1.5}
+          strokeDasharray="6 3"
           onMouseEnter={() => onFeatureHover?.(feature)}
           onMouseLeave={() => onFeatureHover?.(null)}
         />

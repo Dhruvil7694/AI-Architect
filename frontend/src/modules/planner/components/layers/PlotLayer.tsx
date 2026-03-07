@@ -27,9 +27,9 @@ export function PlotLayer({
           key={feature.id}
           feature={feature}
           viewTransform={viewTransform}
-          fill="none"
+          fill="rgba(248,246,242,0.6)"
           stroke="#1f2937"
-          strokeWidth={1.5}
+          strokeWidth={2}
           onMouseEnter={() => onFeatureHover?.(feature)}
           onMouseLeave={() => onFeatureHover?.(null)}
           onClick={onFeatureClick ? () => onFeatureClick(feature) : undefined}

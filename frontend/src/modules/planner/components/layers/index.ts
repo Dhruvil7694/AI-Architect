@@ -7,6 +7,7 @@ export { RoadCorridorLayer } from "./RoadCorridorLayer";
 export { TowerZoneLayer } from "./TowerZoneLayer";
 export { TowerLayer } from "./TowerLayer";
 export { SpacingLayer } from "./SpacingLayer";
+export { AnnotationLayer } from "./AnnotationLayer";
 export {
   BuildableEnvelopeLayer,
   CopCandidateZonesLayer,

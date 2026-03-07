@@ -25,9 +25,9 @@ export function CopLayer({
           key={feature.id}
           feature={feature}
           viewTransform={viewTransform}
-          fill="rgba(16,185,129,0.06)"
-          stroke="#10b981"
-          strokeWidth={1}
+          fill="rgba(209,250,229,0.55)"
+          stroke="#059669"
+          strokeWidth={1.5}
           onMouseEnter={() => onFeatureHover?.(feature)}
           onMouseLeave={() => onFeatureHover?.(null)}
         />
