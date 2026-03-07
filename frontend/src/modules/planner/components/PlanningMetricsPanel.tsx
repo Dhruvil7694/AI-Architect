@@ -107,8 +107,10 @@ export function PlanningMetricsPanel() {
     );
   }
 
-  const isLoading =
-    !jobStatus || jobStatus.status === "pending" || jobStatus.status === "running";
+  // Mirror page.tsx: show skeleton until we actually have metrics, not just until
+  // the job status says "completed" — the geometry query may still be in flight.
+  const hasMetrics = Object.keys(m).length > 0;
+  const isLoading = !hasMetrics && jobStatus?.status !== "failed";
 
   if (isLoading) {
     return (

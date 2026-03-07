@@ -33,12 +33,15 @@ function PlannerContent() {
   const { data: geometryModel = null } = usePlanGeometry(activeScenarioId);
   const { data: jobStatus } = usePlanJobStatus(activeScenarioId);
 
-  // Show loading as soon as a job is active, before the first status poll returns.
-  // Without this, the canvas flashes "No geometry loaded" for ~1.5 s after submit.
+  // Show loading whenever we have an active job but no geometry yet.
+  // Deliberately keep the loader visible even when status becomes "completed":
+  // the geometry query polls every 1.5 s and will populate geometryModel as soon as
+  // result_json is readable.  Only stop loading on an explicit "failed" status so the
+  // canvas never flashes "No geometry loaded" mid-computation.
   const isPlanLoading =
     !!activeScenarioId &&
     geometryModel === null &&
-    (!jobStatus || jobStatus.status === "pending" || jobStatus.status === "running");
+    jobStatus?.status !== "failed";
   const loadingProgress =
     typeof jobStatus?.progress === "number" ? jobStatus.progress : null;
 
