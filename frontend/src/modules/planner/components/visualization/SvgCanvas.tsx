@@ -17,6 +17,7 @@ import { select } from "d3-selection";
 export type SvgCanvasHandle = {
   fitInView: () => void;
   resetView: () => void;
+  getSvgElement: () => SVGSVGElement | null;
 };
 
 type SvgCanvasProps = {
@@ -71,6 +72,7 @@ export function SvgCanvas({
     () => ({
       fitInView: () => setZoomTransform(zoomIdentity),
       resetView: () => setZoomTransform(zoomIdentity),
+      getSvgElement: () => svgRef.current,
     }),
     [],
   );

@@ -176,6 +176,9 @@ export interface FloorPlanGdcr {
   lift_provided: number;
   lift_required_by_height: number;
   lift_required_by_units: number;
+  lift_required_gdcr: number;
+  lift_capped: boolean;
+  lift_cap_reason: string | null;
   lift_ok: boolean;
   // §13.12.2 — Fire lift (> 25 m)
   fire_lift_required: boolean;

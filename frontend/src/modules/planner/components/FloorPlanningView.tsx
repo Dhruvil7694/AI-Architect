@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import { usePlannerStore } from "@/state/plannerStore";
 import { useFloorPlan } from "@/modules/planner/hooks/usePlannerData";
 import { groupFeaturesByLayer } from "@/geometry/layerManager";
@@ -14,6 +14,7 @@ import type {
   FloorPlanMetrics,
   FloorPlanGdcr,
 } from "@/services/plannerService";
+import type { SelectedUnitInfo } from "@/state/plannerStore";
 
 // ─── Colour palette ────────────────────────────────────────────────────────────
 const LAYER_STYLE: Record<string, { fill: string; stroke: string; strokeWidth?: number; strokeDasharray?: string }> = {
@@ -198,6 +199,83 @@ function ComplianceBadge({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+// ─── Unit detail panel ────────────────────────────────────────────────────────
+function UnitDetailPanel({
+  unit,
+  onClose,
+}: {
+  unit: SelectedUnitInfo;
+  onClose: () => void;
+}) {
+  const TYPE_COLOR: Record<string, string> = {
+    "4BHK": "bg-red-50 text-red-700 border-red-200",
+    "3BHK": "bg-amber-50 text-amber-700 border-amber-200",
+    "2BHK": "bg-green-50 text-green-700 border-green-200",
+    "1BHK": "bg-sky-50 text-sky-700 border-sky-200",
+    "1RK":  "bg-purple-50 text-purple-700 border-purple-200",
+    "STUDIO": "bg-purple-50 text-purple-700 border-purple-200",
+  };
+  const colorCls = TYPE_COLOR[unit.unitType ?? ""] ?? "bg-neutral-50 text-neutral-700 border-neutral-200";
+
+  return (
+    <div className="border-b border-neutral-200 bg-white p-4">
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className={`rounded border px-2 py-0.5 text-xs font-bold ${colorCls}`}>
+            {unit.unitType ?? "Unit"}
+          </span>
+          <span className="text-xs font-semibold text-neutral-700">{unit.id}</span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+          aria-label="Close unit details"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Area breakdown (RERA-compliant labelling) */}
+      <div className="space-y-1.5">
+        {[
+          ["Built-up area",    unit.builtUpArea,  "Gross floor area including walls"],
+          ["Carpet area",      unit.carpetArea,   "Usable internal floor area (RERA §2(k))"],
+          ["RERA carpet area", unit.reraCarpet,   "Carpet + 50% of exclusive open areas"],
+        ].map(([label, val, hint]) => (
+          <div key={label as string} className="rounded bg-neutral-50 px-2.5 py-1.5">
+            <div className="flex justify-between">
+              <span className="text-[10px] text-neutral-500">{label as string}</span>
+              <span className="text-xs font-semibold text-neutral-900">
+                {val != null ? `${(val as number).toFixed(1)} m²` : "—"}
+              </span>
+            </div>
+            <div className="mt-0.5 text-[9px] text-neutral-400">{hint as string}</div>
+          </div>
+        ))}
+
+        {/* Plan efficiency */}
+        {unit.efficiency != null && (
+          <div className="flex items-center justify-between rounded border border-dashed border-neutral-200 px-2.5 py-1.5">
+            <span className="text-[10px] text-neutral-500">Plan efficiency</span>
+            <span className={`text-xs font-bold ${unit.efficiency >= 0.7 ? "text-green-700" : unit.efficiency >= 0.6 ? "text-amber-700" : "text-red-600"}`}>
+              {(unit.efficiency * 100).toFixed(1)}%
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* RERA note */}
+      <p className="mt-2 text-[9px] leading-relaxed text-neutral-400">
+        Carpet area as per RERA 2016 §2(k). Built-up area includes external walls and common-wall half-share.
+      </p>
+    </div>
+  );
+}
+
 // ─── Metrics panel ─────────────────────────────────────────────────────────────
 function FloorPlanMetricsPanel({ metrics }: { metrics: FloorPlanMetrics }) {
   const { gdcr } = metrics;
@@ -344,12 +422,22 @@ type FloorPlanningViewProps = {
 
 export function FloorPlanningView({ geometryModel }: FloorPlanningViewProps) {
   const canvasRef           = useRef<SvgCanvasHandle>(null);
+  const svgWrapperRef       = useRef<HTMLDivElement>(null);
   const selectedTowerIndex  = usePlannerStore((s) => s.selectedTowerIndex);
   const setPlanningStep     = usePlannerStore((s) => s.setPlanningStep);
+  const setSelectedTowerIndex = usePlannerStore((s) => s.setSelectedTowerIndex);
   const setSelectedUnit     = usePlannerStore((s) => s.setSelectedUnit);
+  const selectedUnit        = usePlannerStore((s) => s.selectedUnit);
   const scenarios           = usePlannerStore((s) => s.scenarios);
   const activeScenarioId    = usePlannerStore((s) => s.activeScenarioId);
   const inputs              = usePlannerStore((s) => s.inputs);
+
+  // Navigate back to site plan and clear tower selection
+  const goToSitePlan = useCallback(() => {
+    setPlanningStep("site");
+    setSelectedTowerIndex(null);
+    setSelectedUnit(null);
+  }, [setPlanningStep, setSelectedTowerIndex, setSelectedUnit]);
 
   const scenario    = scenarios.find((s) => s.id === activeScenarioId);
   const metrics     = (scenario?.planResultSummary as { metrics?: Record<string, unknown> })?.metrics ?? {};
@@ -413,7 +501,7 @@ export function FloorPlanningView({ geometryModel }: FloorPlanningViewProps) {
         </p>
         <button
           type="button"
-          onClick={() => setPlanningStep("site")}
+          onClick={goToSitePlan}
           className="rounded bg-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-800 hover:bg-neutral-300"
         >
           Back to Site Plan
@@ -425,53 +513,126 @@ export function FloorPlanningView({ geometryModel }: FloorPlanningViewProps) {
   const towerId = (selectedTower.properties.towerId as string) ?? `T${selectedTowerIndex + 1}`;
   const towerFloors = (selectedTower.properties.floors as number) ?? "—";
 
+  const liftCapped    = floorPlanData?.metrics?.gdcr?.lift_capped;
+  const liftCapReason = floorPlanData?.metrics?.gdcr?.lift_cap_reason;
+
+  // ── SVG export ────────────────────────────────────────────────────────────
+  const exportSvg = useCallback(() => {
+    const svgEl = canvasRef.current?.getSvgElement();
+    if (!svgEl || !floorPlanData?.metrics) return;
+
+    // Clone so we can add metadata without mutating live DOM
+    const clone = svgEl.cloneNode(true) as SVGSVGElement;
+
+    // Add title / description for accessibility and archival
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = `Tower ${towerId} — Typical Floor Plan`;
+    clone.insertBefore(title, clone.firstChild);
+
+    const desc = document.createElementNS("http://www.w3.org/2000/svg", "desc");
+    const m = floorPlanData.metrics;
+    desc.textContent = [
+      `Tower: ${towerId}`,
+      `Floors: ${m.nFloors}`,
+      `Height: ${m.buildingHeightM.toFixed(1)} m`,
+      `Net BUA: ${m.netBuaSqm.toFixed(0)} m²`,
+      `Units/floor: ${m.nUnitsPerFloor}`,
+      `Efficiency: ${m.efficiencyPct.toFixed(1)}%`,
+      `Generated: ${new Date().toISOString()}`,
+    ].join(" | ");
+    clone.insertBefore(desc, clone.firstChild);
+
+    // Serialise and trigger download
+    const serialiser = new XMLSerializer();
+    const svgStr = serialiser.serializeToString(clone);
+    const blob = new Blob(
+      [`<?xml version="1.0" encoding="UTF-8"?>\n`, svgStr],
+      { type: "image/svg+xml;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `floor-plan-${towerId}-${m.nFloors}fl.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [canvasRef, floorPlanData, towerId]);
+
   // ── Layout ───────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full w-full overflow-hidden">
       {/* Canvas — left 70% */}
       <div className="relative flex flex-1 flex-col bg-white">
-        {/* Top bar */}
+        {/* Breadcrumb / top bar */}
         <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-3 py-2">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Breadcrumb */}
             <button
               type="button"
-              onClick={() => setPlanningStep("site")}
-              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100"
+              onClick={goToSitePlan}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
               Site Plan
             </button>
-            <span className="text-xs font-semibold text-neutral-800">
-              Tower {towerId} — Typical Floor Plan
+            <span className="text-neutral-300">/</span>
+            <span className="rounded-sm bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-800">
+              Floor Plan
             </span>
+            <span className="text-xs text-neutral-600">Tower {towerId}</span>
             {towerFloors && (
               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
-                {towerFloors} floors
+                {towerFloors} fl
+              </span>
+            )}
+            {/* Lift cap warning */}
+            {liftCapped && (
+              <span
+                className="ml-1 cursor-help rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                title={liftCapReason ?? "Lift count capped — floor plate too short for GDCR requirement"}
+              >
+                ⚠ Lifts capped
               </span>
             )}
           </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => canvasRef.current?.fitInView()}
-              className="rounded px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100"
+              className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100"
             >
               Fit
             </button>
             <button
               type="button"
               onClick={() => canvasRef.current?.resetView()}
-              className="rounded px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100"
+              className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100"
             >
               Reset
             </button>
+            {/* Export SVG — only available once floor plan is loaded */}
+            {floorPlanData?.layout && (
+              <button
+                type="button"
+                onClick={exportSvg}
+                className="flex items-center gap-1 rounded border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300"
+                title="Download floor plan as SVG"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                SVG
+              </button>
+            )}
           </div>
         </div>
 
         {/* SVG canvas */}
-        <div className="relative flex-1">
+        <div ref={svgWrapperRef} className="relative flex-1">
           {canvasModel && (
             <SvgCanvas geometryModel={canvasModel} canvasRef={canvasRef}>
               {({ viewTransform }) => (
@@ -569,14 +730,24 @@ export function FloorPlanningView({ geometryModel }: FloorPlanningViewProps) {
         </div>
       </div>
 
-      {/* Metrics panel — right 30% */}
+      {/* Right panel — unit detail + metrics */}
       <div className="flex w-72 flex-shrink-0 flex-col border-l border-neutral-200 bg-white">
+        {/* Panel header */}
         <div className="border-b border-neutral-200 px-4 py-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-700">
-            Floor Plan Metrics
+            {selectedUnit ? "Unit Details" : "Floor Plan Metrics"}
           </h2>
         </div>
 
+        {/* Unit detail (shown when a unit is clicked) */}
+        {selectedUnit && (
+          <UnitDetailPanel
+            unit={selectedUnit}
+            onClose={() => setSelectedUnit(null)}
+          />
+        )}
+
+        {/* Metrics */}
         {isPending && (
           <div className="flex flex-1 items-center justify-center">
             <div className="text-xs text-neutral-500">Computing…</div>
@@ -584,7 +755,9 @@ export function FloorPlanningView({ geometryModel }: FloorPlanningViewProps) {
         )}
 
         {floorPlanData?.metrics && !isPending && (
-          <FloorPlanMetricsPanel metrics={floorPlanData.metrics} />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <FloorPlanMetricsPanel metrics={floorPlanData.metrics} />
+          </div>
         )}
 
         {!isPending && !floorPlanData && !isError && (
