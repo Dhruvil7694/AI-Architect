@@ -242,6 +242,7 @@ function FloorPlanMetricsPanel({ metrics }: { metrics: FloorPlanMetrics }) {
           {[
             ["Core + Stair", metrics.coreSqm, "bg-slate-200"],
             ["Corridor",     metrics.corridorSqm, "bg-blue-200"],
+            ["FSI-exempt total", metrics.fsiExemptSqm ?? (metrics.coreSqm + metrics.corridorSqm), "bg-amber-100"],
             ["Net unit area",metrics.unitAreaPerFloorSqm, "bg-green-200"],
           ].map(([label, val, cls]) => (
             <div key={label as string} className="flex items-center justify-between text-xs">
@@ -297,19 +298,38 @@ function FloorPlanMetricsPanel({ metrics }: { metrics: FloorPlanMetrics }) {
       {/* GDCR compliance */}
       <section>
         <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-neutral-500">
-          GDCR Compliance
+          GDCR Compliance  <span className="normal-case font-normal text-neutral-400">(Part III)</span>
         </h3>
         <div className="flex flex-col gap-1">
+          {/* §13.12.2 — Lift count */}
           <ComplianceBadge ok={gdcr.lift_ok}
             label={gdcr.lift_required
-              ? `Lift: ${gdcr.lift_provided} provided (required)`
-              : `Lift: ${gdcr.lift_provided} provided (optional)`} />
+              ? `Lifts: ${gdcr.lift_provided} provided, ${gdcr.lift_required_by_units ?? gdcr.lift_required_by_height} required (§13.12.2)`
+              : `Lift: not required (≤ 10 m)`} />
+          {/* §13.12.2 — Fire lift */}
+          {gdcr.fire_lift_required && (
+            <ComplianceBadge ok={!!gdcr.fire_lift_ok}
+              label={`Fire lift: ${gdcr.fire_lift_provided ? "provided" : "MISSING"} (required > 25 m)`} />
+          )}
+          {/* §13.12.3 — Lift landing */}
+          {gdcr.lift_required && (
+            <ComplianceBadge ok={!!gdcr.lift_landing_ok}
+              label={`Lift landing: ${(gdcr.lift_landing_w_m ?? 0).toFixed(2)} m × ${(gdcr.lift_landing_d_m ?? 0).toFixed(1)} m (min 1.8 × 2.0 m)`} />
+          )}
+          {/* Table 13.2 — Stair width */}
           <ComplianceBadge ok={gdcr.stair_width_ok}
-            label={`Stair width: ${gdcr.stair_width_m.toFixed(2)} m (min 1.0 m)`} />
+            label={`Stair width: ${gdcr.stair_width_m.toFixed(2)} m (min ${(gdcr.stair_width_required_m ?? 1.0).toFixed(2)} m, Table 13.2)`} />
+          {/* Corridor */}
           <ComplianceBadge ok={gdcr.corridor_width_ok}
             label={`Corridor: ${gdcr.corridor_width_m.toFixed(1)} m (min 1.2 m)`} />
+          {/* §13.1.7 — Clearances */}
           <ComplianceBadge ok={gdcr.clearance_habitable_ok}
-            label={`Storey ht: ${gdcr.storey_height_m.toFixed(1)} m (min 2.75 m)`} />
+            label={`Storey ht: ${gdcr.storey_height_m.toFixed(1)} m (habitable min 2.9 m §13.1.7)`} />
+          <ComplianceBadge ok={!!gdcr.clearance_service_ok}
+            label={`Service clearance: ${gdcr.storey_height_m.toFixed(1)} m (min 2.1 m corridor/stair)`} />
+        </div>
+        <div className="mt-2 rounded bg-amber-50 p-2 text-[10px] text-amber-700">
+          FSI exemptions (Part II §8.2.2): staircase, corridors, lift well &amp; landing are excluded from FSI computation.
         </div>
       </section>
     </div>

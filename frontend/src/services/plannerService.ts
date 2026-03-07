@@ -171,16 +171,39 @@ export interface FloorPlanLayout {
 }
 
 export interface FloorPlanGdcr {
+  // §13.12.2 — Lift count
   lift_required: boolean;
   lift_provided: number;
+  lift_required_by_height: number;
+  lift_required_by_units: number;
   lift_ok: boolean;
+  // §13.12.2 — Fire lift (> 25 m)
+  fire_lift_required: boolean;
+  fire_lift_provided: boolean;
+  fire_lift_ok: boolean;
+  // §13.12.3 — Lift landing (1.8 m × 2.0 m clear)
+  lift_landing_d_m: number;
+  lift_landing_w_m: number;
+  lift_landing_ok: boolean;
+  // Table 13.2 — Staircases
   stair_count: number;
   stair_width_m: number;
+  stair_width_required_m: number;
   stair_width_ok: boolean;
+  stair_tread_mm: number;
+  stair_riser_mm: number;
+  stair_geometry_ok: boolean;
+  // Corridor
   corridor_width_m: number;
   corridor_width_ok: boolean;
+  // §13.1.7 — Clearance heights
   storey_height_m: number;
+  clearance_habitable_m: number;
   clearance_habitable_ok: boolean;
+  clearance_service_m: number;
+  clearance_service_ok: boolean;
+  // FSI exemptions
+  fsi_exemptions: string[];
 }
 
 export interface FloorPlanMetrics {
@@ -189,9 +212,11 @@ export interface FloorPlanMetrics {
   floorWidthM: number;
   coreSqm: number;
   corridorSqm: number;
+  fsiExemptSqm: number;
   circulationSqm: number;
   unitAreaPerFloorSqm: number;
   nUnitsPerFloor: number;
+  nTotalUnits: number;
   unitTypeCounts: Record<string, number>;
   nFloors: number;
   buildingHeightM: number;
