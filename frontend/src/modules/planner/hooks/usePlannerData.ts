@@ -5,10 +5,13 @@ import {
   startPlanJob,
   getPlanJobStatus,
   getPlanJobResult,
+  generateFloorPlan,
   type SiteMetrics,
   type PlanGenerationRequest,
   type PlanJobStatus,
   type PlanResultDto,
+  type FloorPlanRequest,
+  type FloorPlanResponse,
 } from "@/services/plannerService";
 import { HttpError } from "@/services/httpClient";
 import { usePlannerStore } from "@/state/plannerStore";
@@ -71,6 +74,12 @@ export function usePlanGeometry(jobId: string | null) {
     },
     enabled: Boolean(jobId),
     refetchInterval: 1500,
+  });
+}
+
+export function useFloorPlan() {
+  return useMutation<FloorPlanResponse, Error, FloorPlanRequest>({
+    mutationFn: (payload: FloorPlanRequest) => generateFloorPlan(payload),
   });
 }
 
