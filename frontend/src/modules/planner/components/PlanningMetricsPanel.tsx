@@ -1,6 +1,7 @@
 "use client";
 
 import { usePlannerStore } from "@/state/plannerStore";
+import { usePlanJobStatus } from "@/modules/planner/hooks/usePlannerData";
 
 /** GDCR Table 6.22 — max ground coverage for DW3 is always 40 %. */
 const GC_LIMIT_PCT = 40;
@@ -74,11 +75,24 @@ function Section({
   );
 }
 
+// ── Skeleton row ────────────────────────────────────────────────────────────────
+
+function SkeletonRow() {
+  return (
+    <div className="flex items-baseline justify-between gap-1">
+      <div className="h-2.5 w-16 animate-pulse rounded bg-neutral-200" />
+      <div className="h-2.5 w-10 animate-pulse rounded bg-neutral-200" />
+    </div>
+  );
+}
+
 // ── Main panel ─────────────────────────────────────────────────────────────────
 
 export function PlanningMetricsPanel() {
   const activeScenarioId = usePlannerStore((s) => s.activeScenarioId);
   const scenarios = usePlannerStore((s) => s.scenarios);
+  const { data: jobStatus } = usePlanJobStatus(activeScenarioId);
+
   const scenario = scenarios.find((s) => s.id === activeScenarioId);
   const summary =
     (scenario?.planResultSummary as { metrics?: Record<string, unknown> }) ??
@@ -89,6 +103,47 @@ export function PlanningMetricsPanel() {
     return (
       <div className="rounded border border-neutral-200 bg-white p-3 text-xs text-neutral-500">
         Generate a scenario to see metrics.
+      </div>
+    );
+  }
+
+  const isLoading =
+    !jobStatus || jobStatus.status === "pending" || jobStatus.status === "running";
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-3 rounded border border-neutral-200 bg-white p-3 text-xs shadow-sm">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wide text-neutral-600">
+          Planning metrics
+        </h3>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 pb-0.5">
+            <div className="h-3 w-3 animate-spin rounded-full border border-neutral-400 border-t-transparent" />
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">
+              Computing…
+            </span>
+          </div>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="h-2 w-20 animate-pulse rounded bg-neutral-200" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (jobStatus?.status === "failed") {
+    return (
+      <div className="rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+        <p className="font-medium">Plan generation failed</p>
+        {jobStatus.errorMessage && (
+          <p className="mt-1 text-red-600">{jobStatus.errorMessage}</p>
+        )}
       </div>
     );
   }
