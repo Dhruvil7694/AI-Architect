@@ -27,8 +27,8 @@ export function SiteMetricsSummary() {
 
   return (
     <span className="text-xs text-neutral-600">
-      {Math.round(data.plotAreaSqm)} m² · FSI {data.maxFSI.toFixed(1)} · COP{" "}
-      {copPct}%
+      {Math.round(data.plotAreaSqm)} m² · Max FSI {data.maxFSI.toFixed(1)} ·
+      Max BUA {Math.round(data.maxBUA)} m² · COP {copPct}%
     </span>
   );
 }
