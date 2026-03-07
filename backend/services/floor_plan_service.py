@@ -37,31 +37,45 @@ DXF_TO_M = 0.3048
 M_TO_DXF = 1.0 / DXF_TO_M  # ≈ 3.28084
 
 # ─── GDCR / NBC dimensional standards (metres) ───────────────────────────────
-CORRIDOR_W     = 1.50   # internal residential corridor (NBC min 1.2 m)
-LIFT_CABIN_W   = 1.50   # lift cabin internal width
-LIFT_CABIN_D   = 1.80   # lift cabin depth (6-person residential)
-LIFT_SHAFT_W   = 1.85   # shaft = cabin + wall clearances
-LIFT_LOBBY_D   = 1.50   # lobby depth in front of lift doors
-STAIR_W        = 1.20   # staircase clear width (GDCR min 1.0 m; NBC 1.2 m)
-STAIR_D        = 3.50   # depth for straight flight with mid-landing
-STAIR_WALL     = 0.15   # wall between the two stair wells
-MIN_UNIT_DEPTH = 5.00   # minimum meaningful unit depth (m)
+# GDCR Part III Section 13.12.2–13.12.3 / Table 13.2
+CORRIDOR_W      = 1.50  # internal residential corridor (NBC min 1.2 m)
+LIFT_CABIN_W    = 1.50  # lift cabin internal clear width (6-person min)
+LIFT_CABIN_D    = 1.80  # lift cabin internal depth (6-person min)
+LIFT_SHAFT_W    = 1.85  # shaft = cabin + wall clearances
+LIFT_LANDING_D  = 2.00  # §13.12.3 cl.4: clear landing in front of doors ≥ 1.8 m × 2.0 m
+STAIR_W         = 1.20  # staircase clear width (Table 13.2: ≥ 1.0 m for res. ≤ 15 m;
+                        #   ≥ 1.2 m for res. > 15 m / use alternative 2×1.2 = 1×1.5 m)
+STAIR_D         = 3.50  # depth for straight flight with mid-landing
+STAIR_WALL      = 0.15  # separation wall between two stair wells
+MIN_UNIT_DEPTH  = 5.00  # minimum meaningful unit depth (m)
+# Clearances (§13.1.7)
+CLEARANCE_HABITABLE_M = 2.90  # habitable rooms: ≥ 2.9 m between finished floor levels
+CLEARANCE_SERVICE_M   = 2.10  # corridors / bathrooms / stair cabins: ≥ 2.1 m
 
 
 # ─── GDCR helpers ─────────────────────────────────────────────────────────────
 
-def _n_lifts(n_floors: int, height_m: float) -> int:
+def _n_lifts_required(height_m: float, total_units: int) -> int:
+    """
+    GDCR Part III §13.12.2 — minimum lifts for residential:
+      > 10 m : max(1,  ceil(total_units / 30))
+      > 25 m : max(2,  ceil(total_units / 30))  ← one must be fire lift
+    """
     if height_m <= 10.0:
         return 0
-    if height_m <= 15.0:
-        return 1
-    if height_m <= 30.0:
-        return 2
-    return 3
+    min_by_height = 2 if height_m > 25.0 else 1
+    by_units = math.ceil(total_units / 30) if total_units > 0 else 0
+    return max(min_by_height, by_units)
 
 
 def _n_stairs(height_m: float) -> int:
+    """Table 13.2: residential > 15 m needs 2 staircases of ≥ 1.2 m (or 1 of ≥ 1.5 m)."""
     return 2 if height_m > 15.0 else 1
+
+
+def _stair_width_required(height_m: float) -> float:
+    """Table 13.2 minimum stair clear width (residential)."""
+    return 1.20 if height_m > 15.0 else 1.00
 
 
 # ─── Geometry helpers ─────────────────────────────────────────────────────────
@@ -153,8 +167,15 @@ def generate_floor_plan(
     SHORT_m = min(W_m, D_m)
 
     # ── 2. GDCR core requirements ─────────────────────────────────────────────
-    n_lifts  = _n_lifts(n_floors, building_height_m)
+    # Estimate total dwelling units for GDCR lift sizing (§13.12.2):
+    # avg unit ≈ 55 m², 65% floor efficiency → units/floor ≈ footprint × 0.65 / 55
+    avg_unit_sqm   = 55.0
+    est_units_floor = max(2, int(footprint_sqm * 0.65 / avg_unit_sqm))
+    est_total_units = est_units_floor * max(1, n_floors)
+
+    n_lifts  = _n_lifts_required(building_height_m, est_total_units)
     n_stairs = _n_stairs(building_height_m)
+    stair_w_required = _stair_width_required(building_height_m)
 
     # Core length along L (all components in a row)
     stair_total_L = n_stairs * STAIR_W + max(0, n_stairs - 1) * STAIR_WALL
@@ -169,13 +190,24 @@ def generate_floor_plan(
     s_corr_0 = s_mid - CORRIDOR_W / 2.0   # south edge of corridor
     s_corr_1 = s_mid + CORRIDOR_W / 2.0   # north edge of corridor
 
-    # Core depth (S-axis): stairs + corridor + lift-shaft behind corridor
-    # Stairs span from s_corr_0 going SOUTH (into south unit zone)
-    # Lift shafts sit NORTH of corridor (behind lobby)
+    # Core depth (S-axis):
+    #   - Stairs span STAIR_D centred on corridor centre (STAIR_D/2 each side)
+    #   - Lift shafts sit NORTH of corridor (depth = LIFT_CABIN_D)
+    #   - Lift landing (§13.12.3): 2.0 m clear depth SOUTH of lift doors
+    #     (the 2.0 m landing zone sits within/overlapping the corridor space)
     stair_south_ext = STAIR_D / 2.0          # stairs extend south of corridor centre
-    stair_north_ext = STAIR_D - stair_south_ext  # stairs extend north of corridor centre
     core_s_start    = s_corr_0 - stair_south_ext   # south edge of core
-    core_s_end      = s_corr_1 + LIFT_CABIN_D       # north edge: corridor north + lift depth
+
+    if n_lifts > 0:
+        # Lift shaft sits north of corridor; landing is the 2.0 m in front of doors
+        lift_s0  = s_corr_1                          # lift shaft south edge (corridor north)
+        lift_s1  = s_corr_1 + LIFT_CABIN_D           # lift shaft north edge
+        # Landing zone: 2.0 m from lift door (south of lift shaft)
+        landing_s0 = lift_s0 - LIFT_LANDING_D        # may extend south of corridor
+        core_s_start = min(core_s_start, landing_s0)
+        core_s_end   = lift_s1
+    else:
+        core_s_end = s_corr_1 + STAIR_D - stair_south_ext  # stairs span north of corridor too
 
     # Clamp to floor boundary
     core_s_start = max(0.2, core_s_start)
@@ -256,38 +288,50 @@ def generate_floor_plan(
             },
         })
 
-    # ── Lift lobby (at corridor level) ────────────────────────────────────────
+    # ── Lift lobby / landing (§13.12.3: 2.0 m × lift_total_L clear landing) ──
     if n_lifts > 0:
-        lobby_l0 = l_lift_start
-        lobby_l1 = l_lift_start + lift_total_L
-        lobby_sqm = lift_total_L * CORRIDOR_W
+        lobby_l0  = l_lift_start
+        lobby_l1  = l_lift_start + lift_total_L
+        # Landing occupies LIFT_LANDING_D (2.0 m) south of the lift shaft face.
+        # This may overlap the corridor — that is intentional (it IS the corridor
+        # at that bay, widened to meet the minimum landing requirement).
+        lobby_s0  = s_corr_1 - LIFT_LANDING_D
+        lobby_s1  = s_corr_1
+        lobby_sqm = lift_total_L * LIFT_LANDING_D
         features.append({
             "type": "Feature", "id": "lift_lobby",
-            "geometry": R(lobby_l0, s_corr_0, lobby_l1, s_corr_1),
+            "geometry": R(lobby_l0, lobby_s0, lobby_l1, lobby_s1),
             "properties": {
                 "layer": "lobby",
-                "label": "Lobby",
-                "area_sqm": round(lobby_sqm, 2),
+                "label": "Lift Landing",
+                "area_sqm":    round(lobby_sqm,    2),
+                "landing_w_m": round(lift_total_L, 2),
+                "landing_d_m": LIFT_LANDING_D,
+                "gdcr_min_w":  1.80,
+                "gdcr_min_d":  2.00,
+                "landing_ok":  (lift_total_L >= 1.80 and LIFT_LANDING_D >= 2.00),
             },
         })
 
-    # ── Individual lift shafts (north of lobby) ───────────────────────────────
+    # ── Individual lift shafts (north of corridor) ────────────────────────────
     for li in range(n_lifts):
-        lx_l0 = l_lift_start + li * LIFT_SHAFT_W
-        lx_l1 = lx_l0 + LIFT_SHAFT_W
-        # Shafts sit behind (north of) corridor
-        lx_s0 = s_corr_1
-        lx_s1 = s_corr_1 + LIFT_CABIN_D
+        lx_l0  = l_lift_start + li * LIFT_SHAFT_W
+        lx_l1  = lx_l0 + LIFT_SHAFT_W
+        lx_s0  = s_corr_1                   # shaft south face at corridor north edge
+        lx_s1  = s_corr_1 + LIFT_CABIN_D   # shaft north face
+        is_fire = (building_height_m > 25.0 and li == n_lifts - 1)
         features.append({
             "type": "Feature", "id": f"lift_{li + 1}",
             "geometry": R(lx_l0, lx_s0, lx_l1, lx_s1),
             "properties": {
-                "layer": "lift",
-                "index": li + 1,
-                "label": f"L{li + 1}",
-                "cabin_w_m": LIFT_CABIN_W,
-                "cabin_d_m": LIFT_CABIN_D,
-                "cabin_sqm": round(LIFT_CABIN_W * LIFT_CABIN_D, 2),
+                "layer":      "lift",
+                "index":      li + 1,
+                "label":      f"FL{li + 1}" if is_fire else f"L{li + 1}",
+                "cabin_w_m":  LIFT_CABIN_W,
+                "cabin_d_m":  LIFT_CABIN_D,
+                "cabin_sqm":  round(LIFT_CABIN_W * LIFT_CABIN_D, 2),
+                "fire_lift":  is_fire,
+                "capacity_persons": 6,
             },
         })
 
@@ -380,22 +424,53 @@ def generate_floor_plan(
         t = u["properties"]["unit_type"]
         unit_type_counts[t] = unit_type_counts.get(t, 0) + 1
 
+    # GDCR §13.12.2: actual required lifts based on real unit count
+    actual_total_units  = n_units_floor * max(1, n_floors)
+    n_lifts_req_actual  = _n_lifts_required(building_height_m, actual_total_units)
+    fire_lift_required  = building_height_m > 25.0
+    fire_lift_provided  = any(
+        f["properties"].get("fire_lift")
+        for f in features if f.get("id", "").startswith("lift_")
+    )
+
     gdcr = {
-        "lift_required":          building_height_m > 10.0,
-        "lift_provided":          n_lifts,
-        "lift_ok":                (n_lifts >= 1) if building_height_m > 10.0 else True,
-        "stair_count":            n_stairs,
-        "stair_width_m":          STAIR_W,
-        "stair_width_ok":         STAIR_W >= 1.0,
-        "stair_tread_mm":         250,
-        "stair_riser_mm":         175,
-        "stair_geometry_ok":      True,
-        "corridor_width_m":       CORRIDOR_W,
-        "corridor_width_ok":      CORRIDOR_W >= 1.20,
-        "storey_height_m":        storey_height_m,
-        "clearance_habitable_ok": storey_height_m >= 2.75,
-        "clearance_bathroom_ok":  storey_height_m >= 2.10,
+        # §13.12.2 — Lifts
+        "lift_required":             building_height_m > 10.0,
+        "lift_provided":             n_lifts,
+        "lift_required_by_height":   2 if building_height_m > 25.0 else (1 if building_height_m > 10.0 else 0),
+        "lift_required_by_units":    n_lifts_req_actual,
+        "lift_ok":                   n_lifts >= n_lifts_req_actual,
+        "fire_lift_required":        fire_lift_required,
+        "fire_lift_provided":        fire_lift_provided,
+        "fire_lift_ok":              fire_lift_provided if fire_lift_required else True,
+        # §13.12.3 — Lift landing
+        "lift_landing_d_m":          LIFT_LANDING_D,
+        "lift_landing_w_m":          round(lift_total_L, 2) if n_lifts > 0 else 0.0,
+        "lift_landing_ok":           (lift_total_L >= 1.80 and LIFT_LANDING_D >= 2.00) if n_lifts > 0 else True,
+        # §13.1.13 Table 13.2 — Staircases
+        "stair_count":               n_stairs,
+        "stair_width_m":             STAIR_W,
+        "stair_width_required_m":    stair_w_required,
+        "stair_width_ok":            STAIR_W >= stair_w_required,
+        "stair_tread_mm":            250,
+        "stair_riser_mm":            175,
+        "stair_geometry_ok":         True,
+        # Corridor
+        "corridor_width_m":          CORRIDOR_W,
+        "corridor_width_ok":         CORRIDOR_W >= 1.20,
+        # §13.1.7 — Clearance heights
+        "storey_height_m":           storey_height_m,
+        "clearance_habitable_m":     CLEARANCE_HABITABLE_M,
+        "clearance_habitable_ok":    storey_height_m >= CLEARANCE_HABITABLE_M,
+        "clearance_service_m":       CLEARANCE_SERVICE_M,
+        "clearance_service_ok":      storey_height_m >= CLEARANCE_SERVICE_M,
+        # FSI note (Part II §8.2.2): staircase + passage + corridor exempt from FSI
+        "fsi_exemptions":            ["staircase", "corridor", "lift_well", "lift_landing"],
     }
+
+    # FSI-exempt areas (Part II §8.2.2): corridor + core (stairs + lift wells + landing)
+    # These are EXCLUDED from the FSI BUA computation — only unit areas count.
+    fsi_exempt_sqm = corridor_sqm + core_sqm
 
     metrics = {
         "footprintSqm":        round(footprint_sqm,    2),
@@ -403,9 +478,11 @@ def generate_floor_plan(
         "floorWidthM":         round(SHORT_m,          2),
         "coreSqm":             round(core_sqm,         2),
         "corridorSqm":         round(corridor_sqm,     2),
+        "fsiExemptSqm":        round(fsi_exempt_sqm,   2),
         "circulationSqm":      round(core_sqm + corridor_sqm, 2),
         "unitAreaPerFloorSqm": round(total_unit_sqm,   2),
         "nUnitsPerFloor":      n_units_floor,
+        "nTotalUnits":         actual_total_units,
         "unitTypeCounts":      unit_type_counts,
         "nFloors":             n_floors,
         "buildingHeightM":     building_height_m,
