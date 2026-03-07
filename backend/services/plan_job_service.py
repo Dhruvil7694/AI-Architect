@@ -7,7 +7,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
-from django.db import transaction
+from django.db import transaction, close_old_connections
 from django.conf import settings
 from shapely.wkt import loads as shapely_loads
 from shapely.ops import unary_union
@@ -409,34 +409,50 @@ def create_plan_job(plot_id: str, inputs: Dict[str, Any]) -> PlanJob:
 
 def _run_plan_job_worker(job_id: str) -> None:
     """
-    Background worker: load job, run (mock) optimisation, store result.
+    Background worker: load job, run optimisation, store result.
 
-    The first implementation returns a mock plan result so the frontend
-    can render geometry immediately. The heavy development pipeline can be
-    integrated later without changing the API.
+    Django does not automatically manage DB connections in background threads.
+    We must call close_old_connections() at the start so this thread gets a
+    fresh connection rather than inheriting a potentially stale one from the
+    request thread that spawned us.
     """
+    # Ensure this thread gets a fresh DB connection (not a stale inherited one).
+    close_old_connections()
     try:
-        job = PlanJob.objects.select_related("plot").get(id=job_id)
-    except PlanJob.DoesNotExist:
-        return
+        try:
+            job = PlanJob.objects.select_related("plot").get(id=job_id)
+        except PlanJob.DoesNotExist:
+            logger.error("_run_plan_job_worker: job %s not found", job_id)
+            return
 
-    job.status = PlanJob.STATUS_RUNNING
-    job.progress = 10
-    job.save(update_fields=["status", "progress"])
+        job.status = PlanJob.STATUS_RUNNING
+        job.progress = 10
+        job.save(update_fields=["status", "progress"])
 
-    try:
-        result = _build_envelope_plan_result(job)
-        job.status = PlanJob.STATUS_COMPLETED
-        job.progress = 100
-        job.result_json = result
-        job.completed_at = datetime.now(timezone.utc)
-        job.save(update_fields=["status", "progress", "result_json", "completed_at"])
-    except Exception as exc:  # noqa: BLE001
-        job.status = PlanJob.STATUS_FAILED
-        job.progress = 100
-        job.error_message = str(exc)
-        job.completed_at = datetime.now(timezone.utc)
-        job.save(update_fields=["status", "progress", "error_message", "completed_at"])
+        try:
+            result = _build_envelope_plan_result(job)
+            job.status = PlanJob.STATUS_COMPLETED
+            job.progress = 100
+            job.result_json = result
+            job.completed_at = datetime.now(timezone.utc)
+            job.save(update_fields=["status", "progress", "result_json", "completed_at"])
+            logger.info("Plan job %s completed successfully", job_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Plan job %s failed: %s", job_id, exc)
+            try:
+                close_old_connections()  # reconnect in case connection dropped during computation
+                job.status = PlanJob.STATUS_FAILED
+                job.progress = 100
+                job.error_message = str(exc)
+                job.completed_at = datetime.now(timezone.utc)
+                job.save(update_fields=["status", "progress", "error_message", "completed_at"])
+            except Exception as save_exc:  # noqa: BLE001
+                logger.error(
+                    "Plan job %s: could not save FAILED status: %s", job_id, save_exc
+                )
+    finally:
+        # Release the DB connection back to the pool when the thread exits.
+        close_old_connections()
 
 
 def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
@@ -638,6 +654,10 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
 
     # ── Tower placement: configuration search over floors × tower count ─────────
     tower_pref = inputs.get("towerCount", "auto")
+    logger.warning(
+        "TOWER_SEARCH_START: building_height_m=%.3f tower_pref=%s storey_height_m=%.3f max_bua_sqm=%.3f gdcr_max_height_m=%.3f",
+        building_height_m, tower_pref, storey_height_m, max_bua_sqm, gdcr_max_height_m,
+    )
     all_footprints, n_towers_placed, n_towers_requested, floor_count = _search_best_tower_layout(
         final_envelope=final_envelope,
         zone_result=zone_result,
@@ -647,6 +667,10 @@ def _build_envelope_plan_result(job: PlanJob) -> Dict[str, Any]:
         storey_height_m=storey_height_m,
         max_bua_sqm=max_bua_sqm,
         gdcr_max_height_m=gdcr_max_height_m,
+    )
+    logger.warning(
+        "TOWER_SEARCH_DONE: n_placed=%d n_requested=%d floor_count=%d footprints=%d",
+        n_towers_placed, n_towers_requested, floor_count, len(all_footprints),
     )
 
     # ── Pipeline validation: towers ⊂ envelope ──────────────────────────────────
