@@ -13,6 +13,7 @@ from api.views.plan_jobs import (
 )
 from api.views.floor_plan import FloorPlanAPIView
 from api.views.unit_interior import UnitInteriorAPIView
+from api.views.flat_layout import FlatLayoutAPIView
 
 
 urlpatterns = [
@@ -50,6 +51,11 @@ urlpatterns = [
         "unit-interior/",
         UnitInteriorAPIView.as_view(),
         name="unit-interior-generate",
+    ),
+    path(
+        "flat-layout/",
+        FlatLayoutAPIView.as_view(),
+        name="flat-layout-generate",
     ),
 ]
 

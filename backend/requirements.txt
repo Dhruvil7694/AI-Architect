@@ -30,3 +30,7 @@ openai>=1.0
 
 # Optional: visual analysis for simulate_cop_strategies_synthetic --plot
 matplotlib>=3.7
+
+# Graph-based flat layout engine (floorplan_engine)
+networkx>=3.2          # topology graph + spring layout
+scipy>=1.11            # used by networkx spring_layout (sparse eigensolver)
