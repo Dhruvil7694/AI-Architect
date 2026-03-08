@@ -24,6 +24,7 @@ const LAYER_STYLE: Record<string, { fill: string; stroke: string; strokeWidth?: 
   stair:        { fill: "rgba(148,163,184,0.80)", stroke: "#475569", strokeWidth: 1, strokeDasharray: "3 2" },
   lobby:        { fill: "rgba(186,230,253,0.75)", stroke: "#0ea5e9", strokeWidth: 0.8 },
   lift:         { fill: "rgba(30,58,138,0.85)",   stroke: "#1e3a8a", strokeWidth: 1 },
+  balcony:      { fill: "rgba(187,247,208,0.45)", stroke: "#4ade80", strokeWidth: 0.8, strokeDasharray: "4 2" },
   unit_2BHK:    { fill: "rgba(220,252,231,0.85)", stroke: "#16a34a", strokeWidth: 1 },
   unit_3BHK:    { fill: "rgba(254,243,199,0.85)", stroke: "#d97706", strokeWidth: 1 },
   unit_4BHK:    { fill: "rgba(254,226,226,0.85)", stroke: "#dc2626", strokeWidth: 1 },
@@ -79,7 +80,8 @@ function FloorPlanLayers({
 }) {
   // Render in layer order so labels sit on top
   const ordered = useMemo(() => {
-    const order = ["footprint_bg", "core", "corridor", "lobby", "stair", "lift", "unit"];
+    // balcony renders behind units (it extends outside them on the south face)
+    const order = ["footprint_bg", "balcony", "core", "corridor", "lobby", "stair", "lift", "unit"];
     const sorted = [...layout.features].sort((a: FloorPlanFeature, b: FloorPlanFeature) => {
       const ai = order.indexOf(a.properties.layer);
       const bi = order.indexOf(b.properties.layer);
@@ -94,9 +96,10 @@ function FloorPlanLayers({
         const style = styleForFeature(f);
         const d = featureToPath(f.geometry, viewTransform);
         if (!d) return null;
-        const isUnit = f.properties.layer === "unit";
-        const isLift = f.properties.layer === "lift";
-        const isStair = f.properties.layer === "stair";
+        const isUnit    = f.properties.layer === "unit";
+        const isLift    = f.properties.layer === "lift";
+        const isStair   = f.properties.layer === "stair";
+        const isBalcony = f.properties.layer === "balcony";
         const [cx, cy] = ringCentroid(f.geometry.coordinates[0], viewTransform);
 
         return (
@@ -160,6 +163,16 @@ function FloorPlanLayers({
                 {`Corridor  ${f.properties.width_m ?? 1.5}m`}
               </text>
             )}
+            {isBalcony && (
+              <text
+                x={cx} y={cy}
+                textAnchor="middle" dominantBaseline="middle"
+                fontSize={7} fill="#15803d"
+                style={{ pointerEvents: "none" }}
+              >
+                ⬡ Balcony
+              </text>
+            )}
             {isUnit && (
               <>
                 <text
@@ -180,6 +193,15 @@ function FloorPlanLayers({
                     ? `${Math.round(f.properties.carpet_area_sqm)} m²`
                     : ""}
                 </text>
+                {/* Ventilation warning — red dot if §13.1.11 check fails */}
+                {f.properties.ventilation_ok === false && (
+                  <circle
+                    cx={cx + 14} cy={cy - 12}
+                    r={4} fill="#ef4444" opacity={0.9}
+                    style={{ pointerEvents: "none" }}
+                    title="Ventilation shortfall — §13.1.11"
+                  />
+                )}
               </>
             )}
           </g>
@@ -329,10 +351,10 @@ function FloorPlanMetricsPanel({ metrics }: { metrics: FloorPlanMetrics }) {
         </h3>
         <div className="space-y-1">
           {[
-            ["Core + Stair", metrics.coreSqm, "bg-slate-200"],
-            ["Corridor",     metrics.corridorSqm, "bg-blue-200"],
+            ["Core + Stair",     metrics.coreSqm,              "bg-slate-200"],
+            ["Corridor",         metrics.corridorSqm,           "bg-blue-200"],
             ["FSI-exempt total", metrics.fsiExemptSqm ?? (metrics.coreSqm + metrics.corridorSqm), "bg-amber-100"],
-            ["Net unit area",metrics.unitAreaPerFloorSqm, "bg-green-200"],
+            ["Net unit area",    metrics.unitAreaPerFloorSqm,   "bg-green-200"],
           ].map(([label, val, cls]) => (
             <div key={label as string} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5">
@@ -342,6 +364,18 @@ function FloorPlanMetricsPanel({ metrics }: { metrics: FloorPlanMetrics }) {
               <span className="font-medium">{(val as number).toFixed(0)} m²</span>
             </div>
           ))}
+          {/* Balcony area (open-to-sky, FSI-exempt) */}
+          {(metrics.balconySqmPerFloor ?? 0) > 0 && (
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="h-2.5 w-2.5 rounded-sm bg-green-200 ring-1 ring-green-400 ring-offset-0" />
+                <span className="text-neutral-600">Balconies (open, FSI-exempt)</span>
+              </div>
+              <span className="font-medium text-green-700">
+                {(metrics.balconySqmPerFloor ?? 0).toFixed(0)} m²
+              </span>
+            </div>
+          )}
           <div className="mt-1.5 flex items-center justify-between border-t border-neutral-200 pt-1.5 text-xs font-semibold">
             <span>Efficiency</span>
             <span className={metrics.efficiencyPct >= 65 ? "text-green-700" : "text-amber-700"}>
@@ -416,9 +450,21 @@ function FloorPlanMetricsPanel({ metrics }: { metrics: FloorPlanMetrics }) {
             label={`Storey ht: ${gdcr.storey_height_m.toFixed(1)} m (habitable min 2.9 m §13.1.7)`} />
           <ComplianceBadge ok={!!gdcr.clearance_service_ok}
             label={`Service clearance: ${gdcr.storey_height_m.toFixed(1)} m (min 2.1 m corridor/stair)`} />
+          {/* §13.1.11 — Ventilation */}
+          <ComplianceBadge ok={!!gdcr.ventilation_ok}
+            label={
+              gdcr.ventilation_ok
+                ? `Ventilation: all ${gdcr.ventilation_units_total ?? "—"} units pass (§13.1.11)`
+                : `Ventilation: ${gdcr.ventilation_units_fail ?? "?"} unit(s) shortfall (§13.1.11 — window ≥ 1/6 floor area)`
+            } />
+          {/* §13.1.12 — Balconies */}
+          {gdcr.balcony_provided && (
+            <ComplianceBadge ok={true}
+              label={`Balconies: ${gdcr.balcony_count} units — ${(gdcr.balcony_depth_m ?? 1.5).toFixed(1)} m depth (§13.1.12, FSI-exempt)`} />
+          )}
         </div>
         <div className="mt-2 rounded bg-amber-50 p-2 text-[10px] text-amber-700">
-          FSI exemptions (Part II §8.2.2): staircase, corridors, lift well &amp; landing are excluded from FSI computation.
+          FSI exemptions (Part II §8.2.2): staircase, corridors, lift well, landing &amp; open balconies are excluded from FSI computation.
         </div>
       </section>
     </div>

@@ -140,7 +140,7 @@ export interface FloorPlanRequest {
 }
 
 export interface FloorPlanFeatureProperties {
-  layer: "footprint_bg" | "corridor" | "core" | "stair" | "lobby" | "lift" | "unit";
+  layer: "footprint_bg" | "corridor" | "core" | "stair" | "lobby" | "lift" | "unit" | "balcony";
   label?: string;
   area_sqm?: number;
   unit_id?: string;
@@ -156,6 +156,14 @@ export interface FloorPlanFeatureProperties {
   tread_mm?: number;
   riser_mm?: number;
   compliant_width?: boolean;
+  // Balcony (§13.1.12)
+  fsi_exempt?: boolean;
+  has_balcony?: boolean;
+  balcony_sqm?: number;
+  // Ventilation (§13.1.11)
+  ventilation_ok?: boolean;
+  required_window_sqm?: number;
+  available_window_sqm?: number;
 }
 
 export interface FloorPlanFeature {
@@ -205,6 +213,14 @@ export interface FloorPlanGdcr {
   clearance_habitable_ok: boolean;
   clearance_service_m: number;
   clearance_service_ok: boolean;
+  // §13.1.11 — Ventilation
+  ventilation_units_total?: number;
+  ventilation_units_fail?: number;
+  ventilation_ok?: boolean;
+  // §13.1.12 — Balconies
+  balcony_provided?: boolean;
+  balcony_count?: number;
+  balcony_depth_m?: number;
   // FSI exemptions
   fsi_exemptions: string[];
 }
@@ -217,6 +233,7 @@ export interface FloorPlanMetrics {
   corridorSqm: number;
   fsiExemptSqm: number;
   circulationSqm: number;
+  balconySqmPerFloor?: number;
   unitAreaPerFloorSqm: number;
   nUnitsPerFloor: number;
   nTotalUnits: number;
