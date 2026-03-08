@@ -248,3 +248,67 @@ export async function generateFloorPlan(
   );
 }
 
+// ── Unit interior generation (Stage 3) ───────────────────────────────────────
+
+export interface UnitInteriorRequest {
+  unit_type: string;
+  unit_width_m: number;
+  unit_depth_m: number;
+}
+
+export interface UnitRoomProperties {
+  name: string;
+  room_type: string;
+  area_sqm: number;
+  width_m: number;
+  depth_m: number;
+  gdcr_ok: boolean;
+  gdcr_min_area: number;
+  gdcr_min_w: number;
+  gdcr_ref: string;
+}
+
+export interface UnitRoomFeature {
+  type: "Feature";
+  id: string;
+  geometry: { type: "Polygon"; coordinates: number[][][] };
+  properties: UnitRoomProperties;
+}
+
+export interface UnitInteriorLayout {
+  type: "FeatureCollection";
+  features: UnitRoomFeature[];
+}
+
+export interface UnitGdcrSummary {
+  all_ok: boolean;
+  violations: Array<{ room: string; ref: string; issue: string }>;
+}
+
+export interface UnitInteriorResponse {
+  status: "ok" | "error";
+  unit_type: string;
+  unit_width_m: number;
+  unit_depth_m: number;
+  layout: UnitInteriorLayout;
+  rooms: Array<{
+    name: string;
+    type: string;
+    area_sqm: number;
+    width_m: number;
+    depth_m: number;
+    gdcr_ok: boolean;
+    gdcr_ref: string;
+  }>;
+  gdcr_summary: UnitGdcrSummary;
+}
+
+export async function generateUnitInterior(
+  payload: UnitInteriorRequest,
+): Promise<UnitInteriorResponse> {
+  return httpRequest<UnitInteriorResponse, UnitInteriorRequest>(
+    "/api/development/unit-interior/",
+    { method: "POST", body: payload },
+  );
+}
+

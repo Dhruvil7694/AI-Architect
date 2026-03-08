@@ -203,9 +203,11 @@ function ComplianceBadge({ ok, label }: { ok: boolean; label: string }) {
 function UnitDetailPanel({
   unit,
   onClose,
+  onDesignFlat,
 }: {
   unit: SelectedUnitInfo;
   onClose: () => void;
+  onDesignFlat: () => void;
 }) {
   const TYPE_COLOR: Record<string, string> = {
     "4BHK": "bg-red-50 text-red-700 border-red-200",
@@ -272,6 +274,15 @@ function UnitDetailPanel({
       <p className="mt-2 text-[9px] leading-relaxed text-neutral-400">
         Carpet area as per RERA 2016 §2(k). Built-up area includes external walls and common-wall half-share.
       </p>
+
+      {/* Stage 3 CTA */}
+      <button
+        type="button"
+        onClick={onDesignFlat}
+        className="mt-3 w-full rounded-md bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-700 active:bg-sky-800"
+      >
+        Design Flat Interior →
+      </button>
     </div>
   );
 }
@@ -659,6 +670,8 @@ export function FloorPlanningView({ geometryModel }: FloorPlanningViewProps) {
                           efficiency: f.properties.carpet_area_sqm && f.properties.area_sqm
                             ? f.properties.carpet_area_sqm / f.properties.area_sqm
                             : undefined,
+                          unitWidthM: f.properties.width_m,
+                          unitDepthM: f.properties.depth_m,
                         })
                       }
                     />
@@ -744,6 +757,7 @@ export function FloorPlanningView({ geometryModel }: FloorPlanningViewProps) {
           <UnitDetailPanel
             unit={selectedUnit}
             onClose={() => setSelectedUnit(null)}
+            onDesignFlat={() => setPlanningStep("unit")}
           />
         )}
 

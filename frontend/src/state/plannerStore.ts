@@ -23,7 +23,7 @@ export type PlannerSelection = {
   featureId: string;
 } | null;
 
-export type PlanningStep = "site" | "floor";
+export type PlanningStep = "site" | "floor" | "unit";
 
 export type SelectedUnitInfo = {
   id: string;
@@ -32,6 +32,10 @@ export type SelectedUnitInfo = {
   builtUpArea?: number;
   reraCarpet?: number;
   efficiency?: number;
+  /** Clear internal width (along corridor, L-axis) from floor plan service */
+  unitWidthM?: number;
+  /** Clear internal depth (away from corridor, S-axis) from floor plan service */
+  unitDepthM?: number;
 };
 
 export type PlannerScenario = {
