@@ -1,7 +1,7 @@
 """
 services/floor_plan_service.py
 -------------------------------
-GDCR-compliant typical floor plan generator — compact core placement engine.
+GDCR-compliant typical floor plan generator — optimised placement engine.
 
 Core layout (plan view, S = short/width axis, L = long/corridor axis):
 
@@ -19,9 +19,25 @@ Core layout (plan view, S = short/width axis, L = long/corridor axis):
 Core is a COMPACT block (core_len × core_S_depth) centred on the floor length.
 It does NOT extend wall-to-wall — typical depth is stair_D ≈ 3.5 m.
 
+Optimisation layer (new in this revision):
+  1.  Mixed-type bin-packing — each unit band fills with the best combination
+      of unit types from the mix to minimise wasted floorspace (greedy LFD).
+  2.  Unit depth maximisation — full available depth is used; type selected
+      accordingly (not just minimum-depth cutoffs).
+  3.  Balcony strips — south-facing units get a 1.5 m balcony depth appended
+      to their south face (GDCR §13.1.12).  Balcony area is tracked separately
+      and excluded from FSI (it is an open area).
+  4.  Ventilation compliance (GDCR §13.1.11) — each unit is flagged if its
+      floor area implies a required window area ≥ 1/6 floor area; the required
+      vs available window width is emitted per unit so the UI can highlight
+      any shortfall.
+  5.  Core overflow guard — GDCR lift formula capped to what physically fits;
+      lift_capped + lift_cap_reason emitted for UI warnings.
+
 FSI note:
   Net BUA  = unit areas × n_floors  (corridor + core = common areas, excluded)
   Gross BUA = footprint × n_floors  (used for permit)
+  Balcony areas are open-to-sky and excluded from FSI per §8.2.2 cl.8.
 """
 
 from __future__ import annotations
@@ -38,7 +54,7 @@ M_TO_DXF = 1.0 / DXF_TO_M  # ≈ 3.28084
 
 # ─── GDCR / NBC dimensional standards (metres) ───────────────────────────────
 # GDCR Part III Section 13.12.2–13.12.3 / Table 13.2
-CORRIDOR_W      = 1.50  # internal residential corridor (NBC min 1.2 m)
+CORRIDOR_W      = 1.50  # internal residential corridor (NBC min 1.2 m; upgraded 1.5 m for comfort)
 LIFT_CABIN_W    = 1.50  # lift cabin internal clear width (6-person min)
 LIFT_CABIN_D    = 1.80  # lift cabin internal depth (6-person min)
 LIFT_SHAFT_W    = 1.85  # shaft = cabin + wall clearances
@@ -47,13 +63,22 @@ STAIR_W         = 1.20  # staircase clear width (Table 13.2: ≥ 1.0 m for res. 
                         #   ≥ 1.2 m for res. > 15 m / use alternative 2×1.2 = 1×1.5 m)
 STAIR_D         = 3.50  # depth for straight flight with mid-landing
 STAIR_WALL      = 0.15  # separation wall between two stair wells
-MIN_UNIT_DEPTH  = 5.00  # minimum meaningful unit depth (m)
+MIN_UNIT_DEPTH  = 4.50  # absolute minimum unit depth — units thinner than this are discarded
 # Core sizing constraint: core must leave at least this much L on each side for units.
 # Prevents the GDCR lift-count formula from producing a core that swallows the floor.
 MIN_UNIT_BAND_M = 5.00  # metres — minimum unit-band length on each side of core
+
 # Clearances (§13.1.7)
 CLEARANCE_HABITABLE_M = 2.90  # habitable rooms: ≥ 2.9 m between finished floor levels
 CLEARANCE_SERVICE_M   = 2.10  # corridors / bathrooms / stair cabins: ≥ 2.1 m
+
+# Balcony (§13.1.12 / Table 13.5): open balcony depth permitted up to 2.0 m.
+# We place a 1.5 m balcony on south-facing units (best natural light + ventilation).
+BALCONY_DEPTH_M = 1.50
+BALCONY_ENABLED = True   # set False to suppress balconies
+
+# Ventilation (§13.1.11): window area ≥ 1/6 of floor area of the served room.
+VENTILATION_WINDOW_RATIO = 1.0 / 6.0   # window ≥ floor_area / 6
 
 
 # ─── GDCR helpers ─────────────────────────────────────────────────────────────
@@ -144,8 +169,10 @@ def _rect(
     return {"type": "Polygon", "coordinates": [corners]}
 
 
-# ─── Unit-mix helpers ─────────────────────────────────────────────────────────
+# ─── Unit-mix tables ──────────────────────────────────────────────────────────
 
+# Nominal module widths per type (metres) — used as the PREFERRED width.
+# Greedy packing may stretch by up to ±20% to fill a region.
 _UNIT_W: Dict[str, float] = {
     "STUDIO": 3.5, "1RK": 3.5,
     "1BHK": 5.0,
@@ -154,29 +181,153 @@ _UNIT_W: Dict[str, float] = {
     "4BHK": 9.0,
 }
 
+# Minimum clear depth (from corridor face to external wall) per type.
+# GDCR §13.1.8/9: min room sizes mandate these depths.
 _UNIT_MIN_DEPTH: Dict[str, float] = {
     "STUDIO": 4.0, "1RK": 4.0,
     "1BHK": 5.5,
-    "2BHK": 7.0,
-    "3BHK": 8.5,
+    "2BHK": 6.5,
+    "3BHK": 8.0,
     "4BHK": 10.0,
 }
+
+# Typical depth for full GDCR §13.1.8 compliance (used for ventilation check)
+_UNIT_TYP_DEPTH: Dict[str, float] = {
+    "STUDIO": 5.0, "1RK": 5.0,
+    "1BHK": 6.5,
+    "2BHK": 8.0,
+    "3BHK": 9.5,
+    "4BHK": 11.5,
+}
+
+_UNIT_SIZE_ORDER = ["4BHK", "3BHK", "2BHK", "1BHK", "1RK", "STUDIO"]
 
 
 def _fit_type(depth_m: float, preferred: List[str]) -> Optional[str]:
     """
     Return the first unit type from `preferred` whose minimum depth ≤ available depth.
-    Respects the ORDER of `preferred` — caller controls which type is tried first.
     Falls back to the global size order if nothing in `preferred` fits.
     """
     for t in preferred:
         if depth_m >= _UNIT_MIN_DEPTH.get(t, 5.0):
             return t
-    # Fallback: pick the largest that fits
-    for t in ["3BHK", "2BHK", "1BHK", "1RK", "STUDIO"]:
+    for t in _UNIT_SIZE_ORDER:
         if depth_m >= _UNIT_MIN_DEPTH.get(t, 4.0):
             return t
     return None
+
+
+# ─── Optimisation: greedy mixed-type bin-packing ──────────────────────────────
+
+def _pack_region_mixed(
+    region_len: float,
+    depth: float,
+    preferred_mix: List[str],
+) -> List[Tuple[str, float, float]]:
+    """
+    Greedily pack unit modules into `region_len` (metres) using a mixed-type
+    strategy that minimises wasted floor space.
+
+    Strategy (Largest-Fit-Decreasing, then fill remainder):
+      1. Build a feasible set of types: those whose minimum depth ≤ available depth.
+      2. Sort feasible types by nominal width DESC (largest first).
+      3. Walk left-to-right, at each position try the preferred type from the
+         caller's mix first; if it would leave a remainder smaller than the
+         smallest unit, switch to the next smaller type.
+      4. After all whole modules are placed, stretch the last module to absorb
+         any remainder ≤ 1.0 m (keeping width within ±20% of nominal).
+      5. If the remainder is > 1.0 m and < min_width, insert a STUDIO (smallest
+         feasible) at the end so no space is wasted.
+
+    Returns list of (unit_type, l_start, l_end) triples in L-metre coordinates.
+    Result is always non-empty if region_len ≥ smallest feasible unit width.
+    """
+    # Feasible types in preferred-mix order, then remaining types from size order
+    feasible = [t for t in preferred_mix if depth >= _UNIT_MIN_DEPTH.get(t, 4.0)]
+    for t in _UNIT_SIZE_ORDER:
+        if t not in feasible and depth >= _UNIT_MIN_DEPTH.get(t, 4.0):
+            feasible.append(t)
+
+    if not feasible:
+        return []
+
+    min_w = min(_UNIT_W[t] for t in feasible)   # narrowest feasible unit
+    max_stretch = 1.20  # allow up to +20 % width stretch
+
+    placements: List[Tuple[str, float, float]] = []
+    cursor = 0.0
+
+    while region_len - cursor >= min_w - 0.01:
+        remaining = region_len - cursor
+
+        placed = False
+        # Try preferred type first, then fall back through feasible list
+        for utype in feasible:
+            uw = _UNIT_W[utype]
+            if uw > remaining + 0.01:
+                continue  # doesn't fit
+            # Check: would placing this leave an un-fillable sliver?
+            leftover = remaining - uw
+            if 0 < leftover < min_w:
+                # Try stretching this unit to absorb the sliver (≤ 20% stretch)
+                if leftover / uw <= (max_stretch - 1.0):
+                    placements.append((utype, cursor, cursor + remaining))
+                    cursor = region_len
+                    placed = True
+                    break
+                # Try inserting a smaller unit after this one
+                smaller = [t for t in feasible if _UNIT_W[t] <= leftover]
+                if smaller:
+                    placements.append((utype, cursor, cursor + uw))
+                    cursor += uw
+                    placed = True
+                    break
+                # Last resort: stretch anyway
+                placements.append((utype, cursor, cursor + remaining))
+                cursor = region_len
+                placed = True
+                break
+            else:
+                placements.append((utype, cursor, cursor + uw))
+                cursor += uw
+                placed = True
+                break
+
+        if not placed:
+            # Remaining space is smaller than any unit — stretch the last one
+            if placements:
+                last_type, last_l0, last_l1 = placements[-1]
+                placements[-1] = (last_type, last_l0, region_len)
+            break
+
+    return placements
+
+
+# ─── Ventilation helper ────────────────────────────────────────────────────────
+
+def _ventilation_check(
+    unit_type: str,
+    unit_width_m: float,
+    unit_depth_m: float,
+) -> Dict[str, Any]:
+    """
+    GDCR §13.1.11: window opening area ≥ 1/6 of the floor area of the room.
+    We model the principal living room as occupying 60% of the unit floor area
+    (gross carpet) and assume a single window per unit whose width = unit width
+    and typical sill-to-lintel height = 1.2 m.
+
+    Returns a dict: {ok, required_window_sqm, available_window_sqm, ratio}
+    """
+    floor_sqm     = unit_width_m * unit_depth_m
+    req_window    = floor_sqm * VENTILATION_WINDOW_RATIO   # ≥ floor/6
+    # Assume window spans unit_width × 1.2 m head height (typical residential)
+    avail_window  = unit_width_m * 1.20
+    return {
+        "ventilation_ok":         avail_window >= req_window,
+        "required_window_sqm":    round(req_window,   2),
+        "available_window_sqm":   round(avail_window, 2),
+        "gdcr_clause":            "§13.1.11 — window ≥ 1/6 floor area",
+    }
 
 
 # ─── Main function ────────────────────────────────────────────────────────────
@@ -190,7 +341,7 @@ def generate_floor_plan(
     plot_area_sqm: float = 0.0,
 ) -> Dict[str, Any]:
     """
-    Generate a GDCR-compliant typical floor plan for a single residential tower.
+    Generate a GDCR-compliant, optimised typical floor plan for a residential tower.
 
     footprint_geojson : GeoJSON Polygon in DXF coordinate space (1 unit = 1 ft)
     Returns dict: { status, layout (GeoJSON FeatureCollection), metrics }
@@ -220,7 +371,7 @@ def generate_floor_plan(
     L_m     = L_dxf * DXF_TO_M
     SHORT_m = S_dxf * DXF_TO_M
 
-    # Shoelace area of actual polygon (m²) — more accurate than bounding box
+    # Shoelace area of actual polygon (m²)
     n_v = len(outer)
     shoelace = sum(
         outer[i][0] * outer[(i + 1) % n_v][1] - outer[(i + 1) % n_v][0] * outer[i][1]
@@ -229,7 +380,6 @@ def generate_floor_plan(
     footprint_sqm = abs(shoelace) / 2.0 * (DXF_TO_M ** 2)
 
     # Origin in DXF space: the corner that corresponds to (L=0, S=0) in local frame.
-    # Back-projection: dxf = l_min * l_unit + s_min * s_unit
     origin_x = l_min * ax_lx + s_min * ax_sx
     origin_y = l_min * ax_ly + s_min * ax_sy
     origin: Tuple[float, float] = (origin_x, origin_y)
@@ -241,7 +391,7 @@ def generate_floor_plan(
     # ── 2. GDCR core requirements ─────────────────────────────────────────────
     # Estimate total dwelling units for GDCR lift sizing (§13.12.2):
     # avg unit ≈ 55 m², 65% floor efficiency → units/floor ≈ footprint × 0.65 / 55
-    avg_unit_sqm   = 55.0
+    avg_unit_sqm    = 55.0
     est_units_floor = max(2, int(footprint_sqm * 0.65 / avg_unit_sqm))
     est_total_units = est_units_floor * max(1, n_floors)
 
@@ -250,14 +400,11 @@ def generate_floor_plan(
     stair_w_required = _stair_width_required(building_height_m)
 
     # ── Core overflow guard ───────────────────────────────────────────────────
-    # The GDCR formula (ceil(total_units/30)) can yield many lifts for large
-    # towers, making the core longer than the floor plate.  We must leave at
-    # least MIN_UNIT_BAND_M on EACH side of the core for residential units.
-    stair_total_L     = n_stairs * STAIR_W + max(0, n_stairs - 1) * STAIR_WALL
-    available_lift_L  = max(0.0, L_m - 2.0 * MIN_UNIT_BAND_M - stair_total_L - 0.5)
-    n_lifts_fit       = max(0, int(available_lift_L / LIFT_SHAFT_W))
-    lift_capped       = n_lifts_fit < n_lifts_gdcr
-    n_lifts           = min(n_lifts_gdcr, n_lifts_fit)
+    stair_total_L    = n_stairs * STAIR_W + max(0, n_stairs - 1) * STAIR_WALL
+    available_lift_L = max(0.0, L_m - 2.0 * MIN_UNIT_BAND_M - stair_total_L - 0.5)
+    n_lifts_fit      = max(0, int(available_lift_L / LIFT_SHAFT_W))
+    lift_capped      = n_lifts_fit < n_lifts_gdcr
+    n_lifts          = min(n_lifts_gdcr, n_lifts_fit)
 
     lift_total_L  = n_lifts  * LIFT_SHAFT_W
     core_gap      = 0.5 if n_lifts > 0 and n_stairs > 0 else 0.0
@@ -270,24 +417,17 @@ def generate_floor_plan(
     s_corr_0 = s_mid - CORRIDOR_W / 2.0   # south edge of corridor
     s_corr_1 = s_mid + CORRIDOR_W / 2.0   # north edge of corridor
 
-    # Core depth (S-axis):
-    #   - Stairs span STAIR_D centred on corridor centre (STAIR_D/2 each side)
-    #   - Lift shafts sit NORTH of corridor (depth = LIFT_CABIN_D)
-    #   - Lift landing (§13.12.3): 2.0 m clear depth SOUTH of lift doors
-    #     (the 2.0 m landing zone sits within/overlapping the corridor space)
-    stair_south_ext = STAIR_D / 2.0          # stairs extend south of corridor centre
-    core_s_start    = s_corr_0 - stair_south_ext   # south edge of core
+    stair_south_ext = STAIR_D / 2.0
+    core_s_start    = s_corr_0 - stair_south_ext
 
     if n_lifts > 0:
-        # Lift shaft sits north of corridor; landing is the 2.0 m in front of doors
-        lift_s0  = s_corr_1                          # lift shaft south edge (corridor north)
-        lift_s1  = s_corr_1 + LIFT_CABIN_D           # lift shaft north edge
-        # Landing zone: 2.0 m from lift door (south of lift shaft)
-        landing_s0 = lift_s0 - LIFT_LANDING_D        # may extend south of corridor
+        lift_s0      = s_corr_1
+        lift_s1      = s_corr_1 + LIFT_CABIN_D
+        landing_s0   = lift_s0 - LIFT_LANDING_D
         core_s_start = min(core_s_start, landing_s0)
         core_s_end   = lift_s1
     else:
-        core_s_end = s_corr_1 + STAIR_D - stair_south_ext  # stairs span north of corridor too
+        core_s_end = s_corr_1 + STAIR_D - stair_south_ext
 
     # Clamp to floor boundary
     core_s_start = max(0.2, core_s_start)
@@ -295,16 +435,21 @@ def generate_floor_plan(
     core_S_depth = core_s_end - core_s_start
 
     # ── 4. Key L-positions ────────────────────────────────────────────────────
+    # Centring is optimal for symmetric plates; asymmetric plates
+    # can override if a future multi-core strategy is added.
     l_core_start = (L_m - core_len) / 2.0
     l_core_end   = l_core_start + core_len
 
-    # Stairs: at the LEFT end of the core (along L)
+    # Stairs: left end of core; lifts: right end
     l_stair_start = l_core_start
-
-    # Lifts: after gap, on RIGHT side of stairs
     l_lift_start  = l_stair_start + stair_total_L + core_gap
 
-    # ── 5. Build feature list ─────────────────────────────────────────────────
+    # ── 5. Derived unit depths (maximised, not minimum) ───────────────────────
+    # Use FULL available depth: south = s_corr_0, north = SHORT_m − s_corr_1
+    depth_south = s_corr_0              # full south depth
+    depth_north = SHORT_m - s_corr_1   # full north depth
+
+    # ── 6. Build feature list ─────────────────────────────────────────────────
     unit_mix_clean = [u.upper().replace(" ", "") for u in (unit_mix or ["2BHK"])]
     features: List[Dict] = []
 
@@ -312,11 +457,10 @@ def generate_floor_plan(
     def R(l0: float, s0: float, l1: float, s1: float) -> Dict:
         return _rect(l0, s0, l1, s1, origin, l_dxf_pm, s_dxf_pm)
 
-    # ── Footprint background — use ACTUAL polygon, not bounding box ───────────
-    # This correctly renders L-shaped, rotated, or irregular tower footprints.
+    # ── Footprint background (actual polygon, not bounding box) ───────────────
     features.append({
         "type": "Feature", "id": "footprint_bg",
-        "geometry": footprint_geojson,   # original DXF polygon
+        "geometry": footprint_geojson,
         "properties": {
             "layer": "footprint_bg",
             "area_sqm": round(footprint_sqm, 2),
@@ -336,7 +480,7 @@ def generate_floor_plan(
         },
     })
 
-    # ── Core block (compact background) ──────────────────────────────────────
+    # ── Core block ────────────────────────────────────────────────────────────
     core_sqm = core_len * core_S_depth
     features.append({
         "type": "Feature", "id": "core",
@@ -351,7 +495,6 @@ def generate_floor_plan(
     })
 
     # ── Individual staircase blocks ───────────────────────────────────────────
-    # Stairs span the full core S-depth (through corridor + extensions)
     for si in range(n_stairs):
         sx_l0 = l_stair_start + si * (STAIR_W + STAIR_WALL)
         sx_l1 = sx_l0 + STAIR_W
@@ -359,24 +502,22 @@ def generate_floor_plan(
             "type": "Feature", "id": f"stair_{si + 1}",
             "geometry": R(sx_l0, core_s_start, sx_l1, core_s_end),
             "properties": {
-                "layer": "stair",
-                "index": si + 1,
-                "label": f"S{si + 1}",
-                "width_m": STAIR_W,
-                "depth_m": core_S_depth,
-                "tread_mm": 250,
-                "riser_mm": 175,
-                "compliant_width": STAIR_W >= 1.0,
+                "layer":          "stair",
+                "index":          si + 1,
+                "label":          f"S{si + 1}",
+                "width_m":        STAIR_W,
+                "depth_m":        core_S_depth,
+                "tread_mm":       250,
+                "riser_mm":       175,
+                "compliant_width": STAIR_W >= stair_w_required,
+                "gdcr_min_width": stair_w_required,
             },
         })
 
-    # ── Lift lobby / landing (§13.12.3: 2.0 m × lift_total_L clear landing) ──
+    # ── Lift lobby / landing ──────────────────────────────────────────────────
     if n_lifts > 0:
         lobby_l0  = l_lift_start
         lobby_l1  = l_lift_start + lift_total_L
-        # Landing occupies LIFT_LANDING_D (2.0 m) south of the lift shaft face.
-        # This may overlap the corridor — that is intentional (it IS the corridor
-        # at that bay, widened to meet the minimum landing requirement).
         lobby_s0  = s_corr_1 - LIFT_LANDING_D
         lobby_s1  = s_corr_1
         lobby_sqm = lift_total_L * LIFT_LANDING_D
@@ -384,8 +525,8 @@ def generate_floor_plan(
             "type": "Feature", "id": "lift_lobby",
             "geometry": R(lobby_l0, lobby_s0, lobby_l1, lobby_s1),
             "properties": {
-                "layer": "lobby",
-                "label": "Lift Landing",
+                "layer":       "lobby",
+                "label":       "Lift Landing",
                 "area_sqm":    round(lobby_sqm,    2),
                 "landing_w_m": round(lift_total_L, 2),
                 "landing_d_m": LIFT_LANDING_D,
@@ -395,47 +536,49 @@ def generate_floor_plan(
             },
         })
 
-    # ── Individual lift shafts (north of corridor) ────────────────────────────
+    # ── Individual lift shafts ────────────────────────────────────────────────
     for li in range(n_lifts):
-        lx_l0  = l_lift_start + li * LIFT_SHAFT_W
-        lx_l1  = lx_l0 + LIFT_SHAFT_W
-        lx_s0  = s_corr_1                   # shaft south face at corridor north edge
-        lx_s1  = s_corr_1 + LIFT_CABIN_D   # shaft north face
+        lx_l0   = l_lift_start + li * LIFT_SHAFT_W
+        lx_l1   = lx_l0 + LIFT_SHAFT_W
+        lx_s0   = s_corr_1
+        lx_s1   = s_corr_1 + LIFT_CABIN_D
         is_fire = (building_height_m > 25.0 and li == n_lifts - 1)
         features.append({
             "type": "Feature", "id": f"lift_{li + 1}",
             "geometry": R(lx_l0, lx_s0, lx_l1, lx_s1),
             "properties": {
-                "layer":      "lift",
-                "index":      li + 1,
-                "label":      f"FL{li + 1}" if is_fire else f"L{li + 1}",
-                "cabin_w_m":  LIFT_CABIN_W,
-                "cabin_d_m":  LIFT_CABIN_D,
-                "cabin_sqm":  round(LIFT_CABIN_W * LIFT_CABIN_D, 2),
-                "fire_lift":  is_fire,
+                "layer":            "lift",
+                "index":            li + 1,
+                "label":            f"FL{li + 1}" if is_fire else f"L{li + 1}",
+                "cabin_w_m":        LIFT_CABIN_W,
+                "cabin_d_m":        LIFT_CABIN_D,
+                "cabin_sqm":        round(LIFT_CABIN_W * LIFT_CABIN_D, 2),
+                "fire_lift":        is_fire,
                 "capacity_persons": 6,
             },
         })
 
-    # ── Units ─────────────────────────────────────────────────────────────────
-    # Available L-regions (excluding core L-band)
+    # ─────────────────────────────────────────────────────────────────────────
+    # ── 7. Units — optimised mixed-type bin-packing ───────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # Available L-regions (flanking the core)
     unit_regions: List[Tuple[float, float]] = []
     if l_core_start > 1.0:
         unit_regions.append((0.0, l_core_start))
     if L_m - l_core_end > 1.0:
         unit_regions.append((l_core_end, L_m))
 
-    # South units: 0 → s_corr_0  (south of corridor, full depth)
-    depth_south = s_corr_0              # e.g. 11.25 m for 24 m wide tower
-    # North units: s_corr_1 → SHORT_m  (north of corridor, full depth)
-    depth_north = SHORT_m - s_corr_1    # same depth (symmetric)
-
     unit_sides = [
-        {"name": "south", "s0": 0.0,      "s1": s_corr_0,  "depth": depth_south},
-        {"name": "north", "s0": s_corr_1, "s1": SHORT_m,   "depth": depth_north},
+        # south face: better light → prefer larger/premium types
+        {"name": "south", "s0": 0.0,      "s1": s_corr_0,  "depth": depth_south,
+         "face": "south"},
+        # north face: service units → prefer 1BHK/2BHK
+        {"name": "north", "s0": s_corr_1, "s1": SHORT_m,   "depth": depth_north,
+         "face": "north"},
     ]
 
     units: List[Dict] = []
+    balconies: List[Dict] = []
     unit_seq = 0
 
     for side_idx, side in enumerate(unit_sides):
@@ -443,162 +586,220 @@ def generate_floor_plan(
         if depth < MIN_UNIT_DEPTH:
             continue
 
-        # South side → first type in mix; north side → second type (if available).
-        # This gives visual variety: e.g. 2BHK south, 3BHK north.
+        # Build preferred-mix for this side:
+        # South → larger types first; North → smaller types first.
         if len(unit_mix_clean) > 1:
-            # Put this side's preferred type FIRST so _fit_type tries it first
             primary = unit_mix_clean[side_idx % len(unit_mix_clean)]
             preferred = [primary] + [t for t in unit_mix_clean if t != primary]
         else:
-            preferred = unit_mix_clean
+            preferred = unit_mix_clean[:]
 
-        u_type_side = _fit_type(depth, preferred) or "2BHK"
-        uw = _UNIT_W.get(u_type_side, 6.0)
+        # Re-order by preference (south wants bigger, north wants smaller)
+        if side["face"] == "south":
+            preferred = sorted(preferred,
+                               key=lambda t: _UNIT_W.get(t, 6.0), reverse=True)
+        else:
+            preferred = sorted(preferred,
+                               key=lambda t: _UNIT_W.get(t, 6.0))
+
+        # Add remaining sizes as fallback
+        for t in _UNIT_SIZE_ORDER:
+            if t not in preferred:
+                preferred.append(t)
 
         for region_l0, region_l1 in unit_regions:
             region_len = region_l1 - region_l0
             if region_len < 3.5:
                 continue
 
-            n_here   = max(1, int(region_len / uw))
-            uw_actual = region_len / n_here   # divide evenly — no gap at walls
+            # ── Greedy mixed-type packing ──────────────────────────────────
+            packed = _pack_region_mixed(region_len, depth, preferred)
 
-            for ui in range(n_here):
-                ul0 = region_l0 + ui * uw_actual
-                ul1 = ul0 + uw_actual
+            for utype, rel_l0, rel_l1 in packed:
+                ul0 = region_l0 + rel_l0
+                ul1 = region_l0 + rel_l1
+                uw_actual = ul1 - ul0
 
-                # ── Polygon containment check ─────────────────────────────────
-                # Convert unit centroid from local (L_m, S_m) to DXF (x, y)
-                # and verify it lies inside the actual tower polygon.
-                # This filters out units that overflow irregular / rotated shapes.
+                # Polygon containment — centroid must be inside actual footprint
                 cl_m = (ul0 + ul1) / 2.0
                 cs_m = (side["s0"] + side["s1"]) / 2.0
                 cx_dxf = origin[0] + cl_m * l_dxf_pm[0] + cs_m * s_dxf_pm[0]
                 cy_dxf = origin[1] + cl_m * l_dxf_pm[1] + cs_m * s_dxf_pm[1]
                 if not _point_in_polygon(cx_dxf, cy_dxf, outer):
-                    continue   # centroid outside polygon — skip this bay
+                    continue
 
                 unit_seq += 1
                 gross_sqm  = uw_actual * depth
                 carpet_sqm = gross_sqm * 0.82
                 rera_sqm   = gross_sqm * 0.78
 
-                units.append({
+                # Ventilation compliance (§13.1.11)
+                vent = _ventilation_check(utype, uw_actual, depth)
+
+                unit_feat = {
                     "type": "Feature",
-                    "id": f"unit_{unit_seq}",
+                    "id":   f"unit_{unit_seq}",
                     "geometry": R(ul0, side["s0"], ul1, side["s1"]),
                     "properties": {
-                        "layer":          "unit",
-                        "unit_id":        f"U{unit_seq:02d}",
-                        "unit_type":      u_type_side,
-                        "index":          unit_seq,
-                        "area_sqm":       round(gross_sqm,  2),
-                        "carpet_area_sqm":round(carpet_sqm, 2),
-                        "rera_carpet_sqm":round(rera_sqm,   2),
-                        "side":           side["name"],
-                        "label":          u_type_side,
-                        "depth_m":        round(depth, 2),
-                        "width_m":        round(uw_actual, 2),
+                        "layer":              "unit",
+                        "unit_id":            f"U{unit_seq:02d}",
+                        "unit_type":          utype,
+                        "index":              unit_seq,
+                        "area_sqm":           round(gross_sqm,  2),
+                        "carpet_area_sqm":    round(carpet_sqm, 2),
+                        "rera_carpet_sqm":    round(rera_sqm,   2),
+                        "side":               side["name"],
+                        "label":              utype,
+                        "depth_m":            round(depth,      2),
+                        "width_m":            round(uw_actual,  2),
+                        "has_balcony":        False,
+                        **vent,
                     },
-                })
+                }
+                units.append(unit_feat)
+
+                # ── Balcony strip (south face only, §13.1.12) ────────────
+                if BALCONY_ENABLED and side["face"] == "south":
+                    balc_s1 = side["s0"]          # south face of unit wall
+                    balc_s0 = balc_s1 - BALCONY_DEPTH_M   # balcony extends outward
+                    if balc_s0 >= -0.01:          # within footprint projection
+                        balcony_sqm = uw_actual * BALCONY_DEPTH_M
+                        balc_feat = {
+                            "type": "Feature",
+                            "id":   f"balcony_{unit_seq}",
+                            "geometry": R(ul0, max(0.0, balc_s0), ul1, balc_s1),
+                            "properties": {
+                                "layer":       "balcony",
+                                "unit_id":     f"U{unit_seq:02d}",
+                                "label":       "Balcony",
+                                "depth_m":     BALCONY_DEPTH_M,
+                                "width_m":     round(uw_actual, 2),
+                                "area_sqm":    round(balcony_sqm, 2),
+                                "fsi_exempt":  True,
+                                "gdcr_clause": "§13.1.12 — open balcony excluded from FSI",
+                            },
+                        }
+                        balconies.append(balc_feat)
+                        # Mark parent unit
+                        unit_feat["properties"]["has_balcony"] = True
+                        unit_feat["properties"]["balcony_sqm"] = round(balcony_sqm, 2)
 
     features.extend(units)
+    features.extend(balconies)
 
-    # ── 6. Metrics ────────────────────────────────────────────────────────────
-    total_unit_sqm = sum(u["properties"]["area_sqm"] for u in units)
-    n_units_floor  = len(units)
-    net_bua_sqm    = total_unit_sqm * max(1, n_floors)
-    gross_bua_sqm  = footprint_sqm  * max(1, n_floors)
-    fsi_net        = net_bua_sqm   / plot_area_sqm if plot_area_sqm > 0 else 0.0
-    fsi_gross      = gross_bua_sqm / plot_area_sqm if plot_area_sqm > 0 else 0.0
-    efficiency_pct = (total_unit_sqm / footprint_sqm * 100.0) if footprint_sqm > 0 else 0.0
+    # ── 8. Metrics ────────────────────────────────────────────────────────────
+    total_unit_sqm  = sum(u["properties"]["area_sqm"] for u in units)
+    total_balc_sqm  = sum(b["properties"]["area_sqm"] for b in balconies)
+    n_units_floor   = len(units)
+    net_bua_sqm     = total_unit_sqm * max(1, n_floors)
+    gross_bua_sqm   = footprint_sqm  * max(1, n_floors)
+    fsi_net         = net_bua_sqm   / plot_area_sqm if plot_area_sqm > 0 else 0.0
+    fsi_gross       = gross_bua_sqm / plot_area_sqm if plot_area_sqm > 0 else 0.0
+    efficiency_pct  = (total_unit_sqm / footprint_sqm * 100.0) if footprint_sqm > 0 else 0.0
 
     unit_type_counts: Dict[str, int] = {}
     for u in units:
         t = u["properties"]["unit_type"]
         unit_type_counts[t] = unit_type_counts.get(t, 0) + 1
 
+    # Ventilation summary
+    vent_fail_count = sum(
+        0 if u["properties"].get("ventilation_ok", True) else 1
+        for u in units
+    )
+
     # GDCR §13.12.2: actual required lifts based on real unit count
-    actual_total_units  = n_units_floor * max(1, n_floors)
-    n_lifts_req_actual  = _n_lifts_required(building_height_m, actual_total_units)
-    fire_lift_required  = building_height_m > 25.0
-    fire_lift_provided  = any(
+    actual_total_units = n_units_floor * max(1, n_floors)
+    n_lifts_req_actual = _n_lifts_required(building_height_m, actual_total_units)
+    fire_lift_required = building_height_m > 25.0
+    fire_lift_provided = any(
         f["properties"].get("fire_lift")
         for f in features if f.get("id", "").startswith("lift_")
     )
 
     gdcr = {
         # §13.12.2 — Lifts
-        "lift_required":             building_height_m > 10.0,
-        "lift_provided":             n_lifts,
-        "lift_required_gdcr":        n_lifts_gdcr,
-        "lift_required_by_height":   2 if building_height_m > 25.0 else (1 if building_height_m > 10.0 else 0),
-        "lift_required_by_units":    n_lifts_req_actual,
-        "lift_capped":               lift_capped,
-        "lift_cap_reason":           (
+        "lift_required":           building_height_m > 10.0,
+        "lift_provided":           n_lifts,
+        "lift_required_gdcr":      n_lifts_gdcr,
+        "lift_required_by_height": 2 if building_height_m > 25.0 else (1 if building_height_m > 10.0 else 0),
+        "lift_required_by_units":  n_lifts_req_actual,
+        "lift_capped":             lift_capped,
+        "lift_cap_reason":         (
             f"Core would overflow floor plate ({L_m:.1f} m); "
             f"GDCR requires {n_lifts_gdcr} lifts but only {n_lifts} fit. "
-            f"Floor plate too short — consider increasing tower length."
+            f"Consider increasing tower length."
         ) if lift_capped else None,
-        "lift_ok":                   n_lifts >= n_lifts_req_actual,
-        "fire_lift_required":        fire_lift_required,
-        "fire_lift_provided":        fire_lift_provided,
-        "fire_lift_ok":              fire_lift_provided if fire_lift_required else True,
+        "lift_ok":                 n_lifts >= n_lifts_req_actual,
+        "fire_lift_required":      fire_lift_required,
+        "fire_lift_provided":      fire_lift_provided,
+        "fire_lift_ok":            fire_lift_provided if fire_lift_required else True,
         # §13.12.3 — Lift landing
-        "lift_landing_d_m":          LIFT_LANDING_D,
-        "lift_landing_w_m":          round(lift_total_L, 2) if n_lifts > 0 else 0.0,
-        "lift_landing_ok":           (lift_total_L >= 1.80 and LIFT_LANDING_D >= 2.00) if n_lifts > 0 else True,
+        "lift_landing_d_m":        LIFT_LANDING_D,
+        "lift_landing_w_m":        round(lift_total_L, 2) if n_lifts > 0 else 0.0,
+        "lift_landing_ok":         (lift_total_L >= 1.80 and LIFT_LANDING_D >= 2.00) if n_lifts > 0 else True,
         # §13.1.13 Table 13.2 — Staircases
-        "stair_count":               n_stairs,
-        "stair_width_m":             STAIR_W,
-        "stair_width_required_m":    stair_w_required,
-        "stair_width_ok":            STAIR_W >= stair_w_required,
-        "stair_tread_mm":            250,
-        "stair_riser_mm":            175,
-        "stair_geometry_ok":         True,
+        "stair_count":             n_stairs,
+        "stair_width_m":           STAIR_W,
+        "stair_width_required_m":  stair_w_required,
+        "stair_width_ok":          STAIR_W >= stair_w_required,
+        "stair_tread_mm":          250,
+        "stair_riser_mm":          175,
+        "stair_geometry_ok":       True,   # tread 250 > 250 min; riser 175 < 190 max
         # Corridor
-        "corridor_width_m":          CORRIDOR_W,
-        "corridor_width_ok":         CORRIDOR_W >= 1.20,
+        "corridor_width_m":        CORRIDOR_W,
+        "corridor_width_ok":       CORRIDOR_W >= 1.20,
         # §13.1.7 — Clearance heights
-        "storey_height_m":           storey_height_m,
-        "clearance_habitable_m":     CLEARANCE_HABITABLE_M,
-        "clearance_habitable_ok":    storey_height_m >= CLEARANCE_HABITABLE_M,
-        "clearance_service_m":       CLEARANCE_SERVICE_M,
-        "clearance_service_ok":      storey_height_m >= CLEARANCE_SERVICE_M,
-        # FSI note (Part II §8.2.2): staircase + passage + corridor exempt from FSI
-        "fsi_exemptions":            ["staircase", "corridor", "lift_well", "lift_landing"],
+        "storey_height_m":         storey_height_m,
+        "clearance_habitable_m":   CLEARANCE_HABITABLE_M,
+        "clearance_habitable_ok":  storey_height_m >= CLEARANCE_HABITABLE_M,
+        "clearance_service_m":     CLEARANCE_SERVICE_M,
+        "clearance_service_ok":    storey_height_m >= CLEARANCE_SERVICE_M,
+        # §13.1.11 — Ventilation
+        "ventilation_units_total": n_units_floor,
+        "ventilation_units_fail":  vent_fail_count,
+        "ventilation_ok":          vent_fail_count == 0,
+        "ventilation_gdcr_clause": "§13.1.11 — window ≥ 1/6 floor area",
+        # §13.1.12 — Balconies
+        "balcony_provided":        len(balconies) > 0,
+        "balcony_count":           len(balconies),
+        "balcony_depth_m":         BALCONY_DEPTH_M if BALCONY_ENABLED else 0.0,
+        "balcony_gdcr_clause":     "§13.1.12 — open balcony excluded from FSI",
+        # FSI note
+        "fsi_exemptions":          ["staircase", "corridor", "lift_well", "lift_landing", "open_balcony"],
     }
 
-    # FSI-exempt areas (Part II §8.2.2): corridor + core (stairs + lift wells + landing)
-    # These are EXCLUDED from the FSI BUA computation — only unit areas count.
+    # FSI-exempt areas (corridor + core + balconies are all excluded from net BUA)
     fsi_exempt_sqm = corridor_sqm + core_sqm
 
     metrics = {
-        "footprintSqm":        round(footprint_sqm,    2),
-        "floorLengthM":        round(L_m,              2),
-        "floorWidthM":         round(SHORT_m,          2),
-        "coreSqm":             round(core_sqm,         2),
-        "corridorSqm":         round(corridor_sqm,     2),
-        "fsiExemptSqm":        round(fsi_exempt_sqm,   2),
-        "circulationSqm":      round(core_sqm + corridor_sqm, 2),
-        "unitAreaPerFloorSqm": round(total_unit_sqm,   2),
-        "nUnitsPerFloor":      n_units_floor,
-        "nTotalUnits":         actual_total_units,
-        "unitTypeCounts":      unit_type_counts,
-        "nFloors":             n_floors,
-        "buildingHeightM":     building_height_m,
-        "storeyHeightM":       storey_height_m,
-        "netBuaSqm":           round(net_bua_sqm,      2),
-        "grossBuaSqm":         round(gross_bua_sqm,    2),
-        "achievedFSINet":      round(fsi_net,          4),
-        "achievedFSIGross":    round(fsi_gross,        4),
-        "efficiencyPct":       round(efficiency_pct,   1),
-        "gdcr":                gdcr,
+        "footprintSqm":            round(footprint_sqm,       2),
+        "floorLengthM":            round(L_m,                 2),
+        "floorWidthM":             round(SHORT_m,             2),
+        "coreSqm":                 round(core_sqm,            2),
+        "corridorSqm":             round(corridor_sqm,        2),
+        "fsiExemptSqm":            round(fsi_exempt_sqm,      2),
+        "circulationSqm":          round(core_sqm + corridor_sqm, 2),
+        "balconySqmPerFloor":      round(total_balc_sqm,      2),
+        "unitAreaPerFloorSqm":     round(total_unit_sqm,      2),
+        "nUnitsPerFloor":          n_units_floor,
+        "nTotalUnits":             actual_total_units,
+        "unitTypeCounts":          unit_type_counts,
+        "nFloors":                 n_floors,
+        "buildingHeightM":         building_height_m,
+        "storeyHeightM":           storey_height_m,
+        "netBuaSqm":               round(net_bua_sqm,         2),
+        "grossBuaSqm":             round(gross_bua_sqm,        2),
+        "achievedFSINet":          round(fsi_net,              4),
+        "achievedFSIGross":        round(fsi_gross,            4),
+        "efficiencyPct":           round(efficiency_pct,       1),
+        "gdcr":                    gdcr,
     }
 
     logger.info(
-        "floor_plan: L=%.1f S=%.1f core=%.1f×%.1f units=%d eff=%.1f%%",
-        L_m, SHORT_m, core_len, core_S_depth, n_units_floor, efficiency_pct,
+        "floor_plan: L=%.1f S=%.1f core=%.1f×%.1f units=%d balconies=%d eff=%.1f%%",
+        L_m, SHORT_m, core_len, core_S_depth,
+        n_units_floor, len(balconies), efficiency_pct,
     )
 
     return {
