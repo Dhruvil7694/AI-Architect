@@ -57,11 +57,14 @@ class UnitInteriorAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        design_brief = str(data.get("design_brief", "")).strip()
+
         try:
             result = generate_unit_interior(
                 unit_type=unit_type,
                 unit_width_m=unit_width_m,
                 unit_depth_m=unit_depth_m,
+                design_brief=design_brief,
             )
         except Exception as exc:
             logger.exception("UnitInteriorAPIView: %s", exc)

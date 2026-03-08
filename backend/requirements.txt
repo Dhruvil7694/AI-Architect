@@ -25,5 +25,8 @@ numpy>=1.26
 # Environment (for .env and OPENAI_API_KEY)
 python-dotenv>=1.0
 
+# LLM — room layout generation (Stage 3)
+openai>=1.0
+
 # Optional: visual analysis for simulate_cop_strategies_synthetic --plot
 matplotlib>=3.7

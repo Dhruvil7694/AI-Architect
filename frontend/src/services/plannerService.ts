@@ -254,30 +254,32 @@ export interface UnitInteriorRequest {
   unit_type: string;
   unit_width_m: number;
   unit_depth_m: number;
+  design_brief?: string;
 }
 
-export interface UnitRoomProperties {
+export interface UnitFurnitureItem {
+  type: string;
+  x: number; y: number; w: number; h: number;
+}
+
+export interface UnitRoomData {
   name: string;
-  room_type: string;
+  type: string;
+  x: number; y: number; w: number; h: number;
   area_sqm: number;
   width_m: number;
   depth_m: number;
   gdcr_ok: boolean;
+  gdcr_ref: string;
   gdcr_min_area: number;
   gdcr_min_w: number;
-  gdcr_ref: string;
-}
-
-export interface UnitRoomFeature {
-  type: "Feature";
-  id: string;
-  geometry: { type: "Polygon"; coordinates: number[][][] };
-  properties: UnitRoomProperties;
-}
-
-export interface UnitInteriorLayout {
-  type: "FeatureCollection";
-  features: UnitRoomFeature[];
+  door_wall: "north" | "south" | "east" | "west";
+  door_offset: number;
+  door_width: number;
+  window_walls: string[];
+  window_offset: number | null;
+  window_width: number;
+  furniture: UnitFurnitureItem[];
 }
 
 export interface UnitGdcrSummary {
@@ -287,20 +289,25 @@ export interface UnitGdcrSummary {
 
 export interface UnitInteriorResponse {
   status: "ok" | "error";
+  source: "llm" | "template";
   unit_type: string;
   unit_width_m: number;
   unit_depth_m: number;
-  layout: UnitInteriorLayout;
-  rooms: Array<{
-    name: string;
-    type: string;
-    area_sqm: number;
-    width_m: number;
-    depth_m: number;
-    gdcr_ok: boolean;
-    gdcr_ref: string;
-  }>;
+  design_notes: string;
+  rooms: UnitRoomData[];
   gdcr_summary: UnitGdcrSummary;
+  warnings: string[];
+}
+
+// Keep old types for backward compatibility
+export type UnitRoomProperties = UnitRoomData;
+export interface UnitRoomFeature {
+  type: "Feature"; id: string;
+  geometry: { type: "Polygon"; coordinates: number[][][] };
+  properties: UnitRoomProperties;
+}
+export interface UnitInteriorLayout {
+  type: "FeatureCollection"; features: UnitRoomFeature[];
 }
 
 export async function generateUnitInterior(
