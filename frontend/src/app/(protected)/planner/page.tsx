@@ -7,6 +7,7 @@ import { SiteMetricsSummary } from "@/modules/planner/components/SiteMetricsSumm
 import { DevelopmentInputs } from "@/modules/planner/components/DevelopmentInputs";
 import { PlannerCanvas } from "@/modules/planner/components/PlannerCanvas";
 import { FloorPlanningView } from "@/modules/planner/components/FloorPlanningView";
+import { UnitInteriorView } from "@/modules/planner/components/UnitInteriorView";
 import { Legend } from "@/modules/planner/components/Legend";
 import { LayerControl } from "@/modules/planner/components/LayerControl";
 import { PlanningMetricsPanel } from "@/modules/planner/components/PlanningMetricsPanel";
@@ -100,8 +101,10 @@ function PlannerContent() {
               isLoading={isPlanLoading}
               loadingProgress={loadingProgress}
             />
-          ) : (
+          ) : planningStep === "floor" ? (
             <FloorPlanningView geometryModel={geometryModel} />
+          ) : (
+            <UnitInteriorView />
           )}
         </div>
       </section>

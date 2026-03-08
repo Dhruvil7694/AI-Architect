@@ -6,12 +6,15 @@ import {
   getPlanJobStatus,
   getPlanJobResult,
   generateFloorPlan,
+  generateUnitInterior,
   type SiteMetrics,
   type PlanGenerationRequest,
   type PlanJobStatus,
   type PlanResultDto,
   type FloorPlanRequest,
   type FloorPlanResponse,
+  type UnitInteriorRequest,
+  type UnitInteriorResponse,
 } from "@/services/plannerService";
 import { HttpError } from "@/services/httpClient";
 import { usePlannerStore } from "@/state/plannerStore";
@@ -80,6 +83,12 @@ export function usePlanGeometry(jobId: string | null) {
 export function useFloorPlan() {
   return useMutation<FloorPlanResponse, Error, FloorPlanRequest>({
     mutationFn: (payload: FloorPlanRequest) => generateFloorPlan(payload),
+  });
+}
+
+export function useUnitLayout() {
+  return useMutation<UnitInteriorResponse, Error, UnitInteriorRequest>({
+    mutationFn: (payload: UnitInteriorRequest) => generateUnitInterior(payload),
   });
 }
 
