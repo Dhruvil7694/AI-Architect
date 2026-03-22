@@ -127,7 +127,9 @@ type ProcessedMapData = {
 };
 
 function processBundle(bundle: TpMapBundle): ProcessedMapData | null {
-  const allPositions: Position[] = [];
+  // Only plot positions are used for bounds — roads may extend far
+  // beyond the plot cluster and cause excessive empty space.
+  const plotPositions: Position[] = [];
 
   // ── Road polygons ──
   const roadFeatures: GeometryFeature[] = [];
@@ -137,8 +139,6 @@ function processBundle(bundle: TpMapBundle): ProcessedMapData | null {
     for (const f of model.features) {
       const fid = `road-${feature.id ?? Math.random().toString(36).slice(2)}`;
       roadFeatures.push({ ...f, id: fid });
-      const ring = extractOuterRing(f.geometry);
-      if (ring) for (const p of ring) allPositions.push([Number(p[0]), Number(p[1])]);
     }
   }
 
@@ -160,7 +160,7 @@ function processBundle(bundle: TpMapBundle): ProcessedMapData | null {
       plotFeatures.push({ ...f, id: fid });
       featureToPlotId.set(fid, plotId);
       const ring = extractOuterRing(f.geometry);
-      if (ring) for (const p of ring) allPositions.push([Number(p[0]), Number(p[1])]);
+      if (ring) for (const p of ring) plotPositions.push([Number(p[0]), Number(p[1])]);
     }
 
     const roadWidthRaw = props.roadWidthM;
@@ -178,10 +178,10 @@ function processBundle(bundle: TpMapBundle): ProcessedMapData | null {
     plotGeometryMap.set(plotId, feature.geometry);
   }
 
-  if (allPositions.length === 0) return null;
+  if (plotPositions.length === 0) return null;
 
-  // ── Compute transform ──
-  const bounds = computeBoundsFromPositions(allPositions);
+  // ── Compute transform from plot bounds only ──
+  const bounds = computeBoundsFromPositions(plotPositions);
   if (!bounds) return null;
   const transform = createViewTransform(bounds, SVG_WIDTH, SVG_HEIGHT, PADDING, { flipY: true });
 
