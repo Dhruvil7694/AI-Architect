@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { usePlotsQuery } from "@/modules/plots/hooks/usePlotsQuery";
 import { MiniPlotPreview } from "@/modules/plots/components/MiniPlotPreview";
-import { WholeTpMap } from "@/modules/plots/components/WholeTpMap";
+import { TpMapPicker } from "@/modules/plots/components/TpMapPicker";
 import { usePlannerStore } from "@/state/plannerStore";
+import type { GeoJsonInput } from "@/geometry/geometryNormalizer";
 
 export default function PlotsPage() {
+  const router = useRouter();
   const { data, isLoading, isError } = usePlotsQuery();
-
-  const plotsWithGeometry = (data ?? []).filter(
-    (p): p is typeof p & { geometry: unknown } => Boolean(p.geometry),
-  );
 
   return (
     <section className="space-y-4">
@@ -22,14 +21,15 @@ export default function PlotsPage() {
         </p>
       </header>
 
-      {!isLoading && !isError && plotsWithGeometry.length > 0 && (
-        <div className="rounded-md border border-neutral-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-medium text-neutral-700">
-            Whole TP overview
-          </h3>
-          <WholeTpMap plots={plotsWithGeometry} className="w-full" />
-        </div>
-      )}
+      <div className="rounded-md border border-neutral-200 bg-white p-4">
+        <h3 className="mb-2 text-sm font-medium text-neutral-700">
+          Whole TP overview
+        </h3>
+        <TpMapPicker
+          tpScheme="TP14"
+          onPlotSelect={(id) => router.push(`/planner?plotId=${encodeURIComponent(id)}`)}
+        />
+      </div>
 
       <div className="rounded-md border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
         {isLoading && (
@@ -68,7 +68,7 @@ export default function PlotsPage() {
                   </div>
                 </div>
                 {plot.geometry ? (
-                  <MiniPlotPreview geometry={plot.geometry} />
+                  <MiniPlotPreview geometry={plot.geometry as GeoJsonInput} />
                 ) : (
                   <MiniPlotPreview plotId={plot.id} />
                 )}
