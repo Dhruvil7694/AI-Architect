@@ -99,6 +99,10 @@ def map_development_result_to_dict(
         "towers": towers_payload,
     }
 
+    # Sellable area summary (populated when new input contract is used).
+    if result.sellable_summary is not None:
+        payload["sellable_summary"] = result.sellable_summary
+
     # Optionally expose minimal building-level metadata if present.
     if result.building_layout is not None:
         bl = result.building_layout

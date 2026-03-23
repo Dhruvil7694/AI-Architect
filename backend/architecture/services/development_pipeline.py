@@ -53,11 +53,25 @@ from area_accounting.floor_area import (
 )
 from detailed_layout.config import DetailingConfig
 
-from architecture.spatial.road_edge_detector import detect_road_edges_with_meta
+from architecture.spatial.road_edge_detector import (
+    detect_road_edges_with_meta,
+    select_governing_road_edges,
+)
 from architecture.regulatory.development_optimizer import (
     evaluate_development_configuration,
     OptimalDevelopmentSolution,
 )
+from placement_engine.debug.placement_debug import (
+    PlacementDebugMetrics,
+    compute_placement_debug_metrics,
+    build_debug_geojson,
+)
+from placement_engine.scoring.cop_optimizer import (
+    find_optimized_cop,
+    CopOptimizationResult,
+)
+from ai_planner.program_generator import ProgramSpec
+from planning.tower_plate_estimator import estimate_tower_plate
 
 
 @dataclass
@@ -126,6 +140,13 @@ class DevelopmentFloorPlanResult:
     cop_area_sqft: Optional[float] = None
     cop_margin_m: Optional[float] = None
 
+    # Placement quality instrumentation (None on failure paths)
+    placement_debug_metrics: Optional[PlacementDebugMetrics] = None
+    placement_debug_geojson: Optional[Dict[str, Any]] = None
+
+    # Sellable area summary (populated when new input contract is used)
+    sellable_summary: Optional[Dict[str, Any]] = None
+
 
 def _error_result(
     status: str,
@@ -190,6 +211,15 @@ def generate_optimal_development_floor_plans(
     *,
     include_building_layout: bool = False,
     strict: bool = True,
+    program_spec: Optional[ProgramSpec] = None,
+    forced_towers: Optional[int] = None,
+    target_fsi: Optional[float] = None,
+    building_type: int = 3,
+    units_per_core: int = 4,
+    segment: str = "mid",
+    user_floors: Optional[int] = None,
+    n_buildings: Optional[int] = None,
+    unit_mix: Optional[List[str]] = None,
 ) -> DevelopmentFloorPlanResult:
     """
     Orchestrate the full development pipeline for a Plot:
@@ -205,6 +235,27 @@ def generate_optimal_development_floor_plans(
     """
     if storey_height_m <= 0:
         raise ValueError("storey_height_m must be positive.")
+
+    # --- New input contract: derive min dimensions from building type + core config ---
+    from architecture.models.building_types import get_building_type
+    from architecture.models.core_config import compute_required_footprint_for_core
+    from architecture.models.sellable_area import compute_sellable_area
+
+    bt = get_building_type(building_type)
+
+    # Derive min dimensions from core config + dominant unit type
+    dominant_unit = (unit_mix[0] if unit_mix else "2BHK")
+    fp_req = compute_required_footprint_for_core(
+        units_per_core=units_per_core,
+        unit_type=dominant_unit,
+        building_height_m=bt.max_height_m,
+    )
+    min_width_m = max(min_width_m, fp_req.min_footprint_width_m)
+    min_depth_m = max(min_depth_m, fp_req.min_footprint_depth_m)
+
+    # Override tower count if user specified
+    if n_buildings is not None:
+        forced_towers = n_buildings
 
     road_width = float(getattr(plot, "road_width_m", 0.0) or 0.0)
     if road_width <= 0.0:
@@ -223,6 +274,8 @@ def generate_optimal_development_floor_plans(
         min_width_m=min_width_m,
         min_depth_m=min_depth_m,
         mode="development",
+        forced_towers=forced_towers,
+        target_fsi=target_fsi,
     )
 
     if (
@@ -234,6 +287,10 @@ def generate_optimal_development_floor_plans(
             status="INFEASIBLE",
             reason="INFEASIBLE",
             details={"message": "Development optimiser found no feasible configuration."},
+        )
+    if dev_sol.configuration is not None:
+        dev_sol.configuration.validate(
+            plot_area_sqm=float(getattr(plot, "plot_area_sqm", 0.0) or 0.0),
         )
 
     n_towers = dev_sol.n_towers
@@ -260,6 +317,7 @@ def generate_optimal_development_floor_plans(
     # Step 2 — recompute envelope at final height.
     plot_geom = plot.geom
     road_edges, _ = detect_road_edges_with_meta(plot_geom, None)
+    road_edges, _ = select_governing_road_edges(plot_geom, road_edges)
 
     env = compute_envelope(
         plot_wkt=plot_geom.wkt,
@@ -281,6 +339,31 @@ def generate_optimal_development_floor_plans(
 
     envelope_wkt = env.envelope_polygon.wkt
 
+    # Extract road-edge direction angles from the edge margin audit so the
+    # placement scorer can apply the road-alignment heuristic.
+    road_edge_angles: List[float] = []
+    for _edge in (getattr(env, "edge_margin_audit", None) or []):
+        if not isinstance(_edge, dict) or _edge.get("edge_type") != "ROAD":
+            continue
+        p1 = _edge.get("p1")
+        p2 = _edge.get("p2")
+        if p1 and p2:
+            try:
+                dx = float(p2[0]) - float(p1[0])
+                dy = float(p2[1]) - float(p1[1])
+                import math as _math
+                road_edge_angles.append(_math.degrees(_math.atan2(dy, dx)) % 180.0)
+            except (TypeError, IndexError, ValueError):
+                pass
+
+    # Optional ProgramSpec-derived plate hints for placement scoring.
+    target_plate_area_sqft: Optional[float] = None
+    preferred_depth_m: Optional[float] = None
+    if program_spec is not None:
+        plate_est = estimate_tower_plate(program_spec)
+        target_plate_area_sqft = float(plate_est["plate_area_sqm"]) * 10.7639
+        preferred_depth_m = float(plate_est["preferred_depth_m"])
+
     # Step 3 — recompute placement for chosen n_towers.
     placement: PlacementResult = compute_placement(
         envelope_wkt=envelope_wkt,
@@ -288,6 +371,9 @@ def generate_optimal_development_floor_plans(
         n_towers=n_towers,
         min_width_m=min_width_m,
         min_depth_m=min_depth_m,
+        road_edge_angles_deg=road_edge_angles or None,
+        target_plate_area_sqft=target_plate_area_sqft,
+        preferred_depth_m=preferred_depth_m,
     )
     if placement.status != "VALID" or not placement.footprints:
         return _error_result(
@@ -300,6 +386,60 @@ def generate_optimal_development_floor_plans(
                 "n_towers_placed": placement.n_towers_placed,
             },
         )
+
+    # Step 3b — compute placement debug metrics (read-only; does not alter placement).
+    debug_metrics = None
+    debug_geojson = None
+    try:
+        debug_metrics = compute_placement_debug_metrics(
+            envelope_result=env,
+            placement_result=placement,
+        )
+        debug_geojson = build_debug_geojson(
+            envelope_result=env,
+            placement_result=placement,
+        )
+        placement.debug_metrics = debug_metrics
+
+        # Step 7 — COP optimizer: find the best COP placement in post-tower leftover.
+        # This is additive — the existing carved COP is unchanged.
+        _cop_required_sqft = float(
+            getattr(env, "common_plot_area_sqft", None) or 0.0
+        )
+        if _cop_required_sqft <= 0.0:
+            _cop_required_sqft = float(plot.geom.area) * 0.10  # 10% fallback
+
+        _placed_polys = [fp.footprint_polygon for fp in placement.footprints]
+        _cop_opt: CopOptimizationResult = find_optimized_cop(
+            envelope=env.envelope_polygon,
+            placed_footprints=_placed_polys,
+            building_height_m=height_m,
+            required_cop_area_sqft=_cop_required_sqft,
+        )
+
+        if _cop_opt.found and _cop_opt.cop_polygon is not None:
+            from shapely.geometry import mapping as _mapping
+            _cop_geojson_geom = _mapping(_cop_opt.cop_polygon)
+            debug_geojson["features"].append({
+                "type": "Feature",
+                "geometry": _cop_geojson_geom,
+                "properties": {
+                    "layer":           "optimized_cop",
+                    "area_sqft":       _cop_opt.area_sqft,
+                    "min_dimension_m": _cop_opt.min_dimension_m,
+                    "component_index": _cop_opt.component_index,
+                    "label":           "Optimized COP (post-placement)",
+                    "note":            _cop_opt.note,
+                },
+            })
+            debug_geojson["metadata"]["layer_order"] = debug_geojson[
+                "metadata"
+            ].get("layer_order", []) + ["optimized_cop"]
+
+    except Exception:  # noqa: BLE001
+        # Never let instrumentation break the pipeline.
+        debug_metrics = None
+        debug_geojson = None
 
     # Derive deterministic tower ordering based on footprint centroid.
     footprints: List[FootprintCandidate] = placement.footprints
@@ -383,6 +523,7 @@ def generate_optimal_development_floor_plans(
                 skeleton=skeleton,
                 floor_id=floor_id,
                 module_width_m=None,
+                program_spec=program_spec,
             )
         except (FloorAggregationError, FloorAggregationValidationError) as exc:
             if strict:
@@ -489,6 +630,36 @@ def generate_optimal_development_floor_plans(
                 )
             building_layout = None
 
+    # --- Compute sellable area summary ---
+    _achieved_fsi = float(dev_sol.achieved_fsi)
+    sellable_summary: Optional[Dict[str, Any]] = None
+    if _achieved_fsi and _achieved_fsi > 0:
+        plot_area_sqm = float(getattr(plot, "plot_area_sqm", 0.0) or 0.0)
+        plot_area_yards = plot_area_sqm * 1.19599  # sqm -> sq yards
+        avg_flat_sqft = 0.0
+        if tower_layouts:
+            total_units = sum(t.total_units for t in tower_layouts)
+            total_area = sum(t.unit_area_sum_sqm for t in tower_layouts)
+            if total_units > 0:
+                avg_flat_sqft = (total_area / total_units) * 10.764  # sqm -> sqft
+
+        sellable = compute_sellable_area(
+            plot_area_sq_yards=plot_area_yards,
+            achieved_fsi=_achieved_fsi,
+            flat_total_sqft=avg_flat_sqft,
+            segment=segment,
+        )
+        sellable_summary = {
+            "plotAreaSqYards": round(plot_area_yards, 1),
+            "achievedFsi": round(_achieved_fsi, 3),
+            "sellablePerYard": sellable.sellable_per_yard,
+            "totalSellableSqft": sellable.total_sellable_sqft,
+            "avgFlatTotalSqft": round(avg_flat_sqft, 0),
+            "estimatedRcaPerFlatSqft": sellable.estimated_rca_per_flat_sqft,
+            "efficiencyRatio": sellable.efficiency_ratio,
+            "segment": segment,
+        }
+
     # Success: assemble final result using optimiser metrics and derived height.
     return DevelopmentFloorPlanResult(
         status="OK",
@@ -512,5 +683,7 @@ def generate_optimal_development_floor_plans(
             or getattr(dev_sol, "cop_area_sqft", 0.0)
         ),
         cop_margin_m=getattr(env, "cop_margin_m", None),
+        placement_debug_metrics=debug_metrics,
+        placement_debug_geojson=debug_geojson,
+        sellable_summary=sellable_summary,
     )
-
