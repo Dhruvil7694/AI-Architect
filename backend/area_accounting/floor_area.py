@@ -360,3 +360,37 @@ def build_floor_layout_with_area(
         area = compute_floor_area_breakdown_basic(floor)
     return floor, area
 
+
+def compute_floor_area_breakdown_with_rca_estimate(
+    gross_built_up_sqm: float,
+    core_area_sqm: float,
+    corridor_area_sqm: float,
+    unit_envelope_areas_sqm: list[float],
+    segment: str = "mid",
+    shaft_area_sqm: float = 0.0,
+) -> FloorAreaBreakdown:
+    """Quick RCA estimation without wall engine — uses segment efficiency ratio."""
+    from architecture.models.sellable_area import _load_sellable_config
+
+    cfg = _load_sellable_config()
+    seg_ratios = cfg.get("segment_efficiency", {})
+    ratio = float(seg_ratios.get(segment, cfg.get("flat_to_rca_ratio", 0.55)))
+
+    carpet_per_unit = tuple(round(a * ratio, 2) for a in unit_envelope_areas_sqm)
+    rca_total = sum(carpet_per_unit)
+    unit_envelope_total = sum(unit_envelope_areas_sqm)
+    common_total = core_area_sqm + corridor_area_sqm + shaft_area_sqm
+
+    return FloorAreaBreakdown(
+        gross_built_up_sqm=gross_built_up_sqm,
+        core_area_sqm=core_area_sqm,
+        corridor_area_sqm=corridor_area_sqm,
+        shaft_area_sqm=shaft_area_sqm,
+        common_area_total_sqm=common_total,
+        unit_envelope_area_sqm=unit_envelope_total,
+        internal_wall_area_sqm=0.0,
+        external_wall_area_sqm=0.0,
+        rera_carpet_area_total_sqm=round(rca_total, 2),
+        carpet_per_unit=carpet_per_unit,
+    )
+
