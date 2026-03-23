@@ -565,3 +565,21 @@ building_types:
     cop_required: true
     typical_efficiency_ratio: 0.55
     notes: "6+ floors, fire stairs, refuge area >25m, dual staircase >15m"
+
+sellable_ratios:
+  # Industry heuristic: achieved FSI → sellable sq ft per sq yard of plot
+  fsi_to_sellable_per_yard:
+    - { fsi: 1.8, sellable_per_yard: 27 }
+    - { fsi: 2.7, sellable_per_yard: 42 }
+    - { fsi: 3.6, sellable_per_yard: 54 }
+    - { fsi: 4.0, sellable_per_yard: 60 }
+
+  # General ratio: flat_total_area × ratio = RCA (RERA carpet area)
+  flat_to_rca_ratio: 0.55
+
+  # Segment-specific efficiency ratios
+  segment_efficiency:
+    budget: 0.60
+    mid: 0.55
+    premium: 0.50
+    luxury: 0.45
