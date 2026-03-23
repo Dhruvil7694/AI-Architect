@@ -38,6 +38,9 @@ access_rules:
   minimum_road_width_for_dw3: 9
   land_locked:
     minimum_access_width: 12
+  multi_road_governance:
+    max_road_edges_considered: 1
+    governing_edge_selection: "longest_length"
   if_road_width_less_than_9:
     dw3_allowed: false
     max_height: 10
@@ -52,6 +55,11 @@ use_zone:
 
 fsi_rules:
   base_fsi: 1.8
+  strict_mode:
+    enforce_corridor_distance: true
+    enforce_authority_zone_gating: true
+    enforce_exclusion_adjusted_fsi: true
+    enforce_premium_charge_breakdown: true
 
   premium_tiers:
     - additional_fsi: 0.9
@@ -72,6 +80,82 @@ fsi_rules:
     eligible_if:
       road_width_min_m: 36
       buffer_distance_m: 200
+      eligible_road_widths_m: [36, 45]
+      require_distance_check: true
+      distance_basis: "within_200m_from_outer_boundary_of_36m_or_45m_road"
+      distance_source: "geometric"
+      distance_geometry_source: "nearest_plot_with_eligible_road_width"
+  legal_gating:
+    default_authority: "SUDA"
+    default_zone: "R1"
+    authority_zone_tier_caps:
+      - authority: "SUDA"
+        zone: "R1"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "SUDA"
+        zone: "R2"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "SUDA"
+        zone: "R3"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "SUDA"
+        zone: "C1"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "SUDA"
+        zone: "C2"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "AUDA"
+        zone: "R1"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "AUDA"
+        zone: "C2"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "*"
+        zone: "R1"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "*"
+        zone: "R2"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "*"
+        zone: "R3"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "*"
+        zone: "C1"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "*"
+        zone: "C2"
+        base_cap: 2.7
+        corridor_cap: 4.0
+      - authority: "*"
+        zone: "*"
+        base_cap: 2.7
+        corridor_cap: 4.0
+  premium_charge_rules:
+    charge_basis: "jantri_rate_percent"
+    chargeable_on_additional_fsi_only: true
+    currency: "INR"
+    require_jantri_rate_input_for_amount: true
+  exclusion_accounting:
+    enabled: true
+    staircase_lift_core_from_layout: true
+    parking_floor_exclusion:
+      enabled: true
+      max_excluded_parking_floors: 1
+    refuge_area_exclusion:
+      enabled: true
+      trigger_height_m: 25
+      excluded_pct_of_typical_floor: 4
 
 fsi_exclusions:
   staircase: "formula_based"
@@ -118,16 +202,22 @@ road_side_margin:
   reference: "Table 6.24"
   logic: "road_width_based OR height_based_whichever_higher"
   road_width_margin_map:
-    - road_max: 9
+    - road_max: 7.5
+      margin: 2.5
+    - road_max: 9.0
+      margin: 2.5
+    - road_max: 12.0
       margin: 3.0
-    - road_max: 12
+    - road_max: 15.0
+      margin: 3.0
+    - road_max: 18.0
       margin: 4.5
-    - road_max: 18
+    - road_max: 30.0
       margin: 6.0
-    - road_max: 36
-      margin: 9.0
+    - road_max: 45.0
+      margin: 7.5
     - road_max: 999
-      margin: 12.0
+      margin: 9.0
   height_formula: "H / 5"
   minimum_road_side_margin: 1.5
 
@@ -151,6 +241,18 @@ inter_building_margin:
   reference: "Table 6.25"
   taller_building_rule: true
   formula: "H / 3"
+  mode: "height_band_table"
+  height_spacing_map:
+    - height_max: 10.0
+      margin: 4.5
+    - height_max: 16.5
+      margin: 4.5
+    - height_max: 25.0
+      margin: 6.0
+    - height_max: 45.0
+      margin: 9.0
+    - height_max: 70.0
+      margin: 12.0
   minimum_spacing_m: 3.0
   applies_to: "parallel_facing_walls"
 
@@ -316,3 +418,150 @@ common_open_plot:
       - proportional_split
       - custom_split
     maximum_number_of_cop_blocks: 4   # POC cap to avoid fragmentation explosion
+
+
+# ============================================================
+# RESIDENTIAL ESSENTIAL NORMS (SITE TO FLAT LEVEL)
+# ============================================================
+
+residential_essential_norms:
+  references:
+    gdcr_part_ii: "General Planning and Development Regulations"
+    gdcr_part_iii: "Performance Regulations"
+    nbc_2016: "Part 3 and Part 4"
+  unit_system: "MKS"
+  occupancy: "Residential Apartment (DW3)"
+
+  site_planning:
+    min_plot_frontage_m: 6.0
+    preferred_plot_frontage_m: 9.0
+    min_internal_approach_road_m: 6.0
+    min_fire_tender_access_m: 4.5
+    min_pedestrian_path_m: 1.8
+    max_driveway_slope: "1:10"
+    max_ramp_gradient: "1:12"
+    max_paving_in_open_space_pct: 50
+    stilt_clear_height_m_min: 2.4
+    service_setback_for_transformer_m: 1.5
+
+  tower_and_block_planning:
+    preferred_slab_depth_range_m: [10.0, 22.0]
+    min_block_separation_m_absolute: 4.5
+    enforce_taller_building_spacing: true
+    max_tower_aspect_ratio: 6.0
+    minimum_courtyard_width_m: 7.5
+    sky_exposure_plane_control: false
+
+  vertical_circulation:
+    stair:
+      min_width_m: 1.0
+      min_tread_mm: 250
+      max_riser_mm: 190
+      min_headroom_m: 2.2
+      handrail_required: true
+    lift:
+      mandatory_above_height_m: 10.0
+      min_lift_lobby_width_m: 1.5
+    fire_stair:
+      required_above_height_m: 15.0
+      min_width_m: 1.5
+
+  horizontal_circulation:
+    corridor:
+      planning_min_width_m: 1.2
+      absolute_min_width_m: 1.0
+      dead_end_limit_m_non_sprinklered: 6.0
+      dead_end_limit_m_sprinklered: 9.0
+      max_travel_distance_m_non_sprinklered: 22.5
+      max_travel_distance_m_sprinklered: 30.0
+    door:
+      min_exit_door_width_m: 0.9
+      opening_direction: "in_direction_of_egress"
+
+  flat_level_planning:
+    min_unit_planning_depth_m: 4.5
+    min_habitable_room_clear_height_m: 2.75
+    min_kitchen_clear_height_m: 2.6
+    min_bath_toilet_clear_height_m: 2.1
+    min_habitable_room_area_sqm: 9.5
+    min_habitable_room_width_m: 2.4
+    min_kitchen_area_sqm: 5.0
+    min_kitchen_width_m: 1.8
+    min_toilet_area_sqm: 1.1
+    min_bath_area_sqm: 1.8
+    min_combined_bath_wc_area_sqm: 2.8
+    min_balcony_width_m: 1.0
+    ventilation:
+      min_window_to_floor_ratio: 0.1667
+      cross_ventilation_preferred: true
+    natural_light:
+      min_opening_to_floor_ratio: 0.10
+
+  parking_and_services:
+    parking_computation_basis: "as_per_table_6_44"
+    parking_stacking_factor: 1.5
+    min_parking_driveway_width_m: 6.0
+    min_two_wheeler_slot_m: [1.0, 2.0]
+    min_four_wheeler_slot_m: [2.5, 5.0]
+    ev_readiness:
+      min_ev_ready_pct: 20
+      load_management_required: true
+    utilities:
+      rainwater_harvesting_required: true
+      solid_waste_bin_required: true
+      solar_hot_water_trigger_bua_sqm: 500
+
+  fire_life_safety:
+    fire_noc_required_above_m: 15.0
+    refuge_area_required_above_m: 25.0
+    refuge_area_min_pct_per_floor: 4.0
+    min_fire_separation_m: 6.0
+    firefighting_shaft_required_above_m: 15.0
+    fire_lift_required_above_m: 15.0
+
+  quality_checks:
+    enforce_dimensional_compliance: true
+    enforce_accessibility_basics: true
+    enforce_egress_continuity: true
+    enforce_wet_area_stack_preference: true
+
+# ============================================================
+# BUILDING TYPE TAXONOMY
+# ============================================================
+
+building_types:
+  - id: 1
+    label: "Low-Rise Residential"
+    max_height_m: 10.0
+    max_floors: 3
+    lift_required: false
+    fire_stair_required: false
+    refuge_area_required: false
+    min_road_width_m: 9.0
+    cop_required: false
+    typical_efficiency_ratio: 0.65
+    notes: "G+3, no lift, single staircase, GDCR low-rise band (≤10m)"
+
+  - id: 2
+    label: "Mid-Rise Residential"
+    max_height_m: 15.0
+    max_floors: 5
+    lift_required: true
+    fire_stair_required: true
+    refuge_area_required: false
+    min_road_width_m: 12.0
+    cop_required: true
+    typical_efficiency_ratio: 0.58
+    notes: "G+5, lift mandatory >10m, fire stair required >15m, GDCR mid-rise band"
+
+  - id: 3
+    label: "High-Rise Residential"
+    max_height_m: 70.0
+    max_floors: 23
+    lift_required: true
+    fire_stair_required: true
+    refuge_area_required: true
+    min_road_width_m: 12.0
+    cop_required: true
+    typical_efficiency_ratio: 0.55
+    notes: "6+ floors, fire stairs, refuge area >25m, dual staircase >15m"
