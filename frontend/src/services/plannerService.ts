@@ -49,6 +49,17 @@ export interface PlanGeometryDto {
   labels?: GeoJsonInput;
 }
 
+export interface SellableSummary {
+  plotAreaSqYards: number;
+  achievedFsi: number;
+  sellablePerYard: number;
+  totalSellableSqft: number;
+  avgFlatTotalSqft: number;
+  estimatedRcaPerFlatSqft: number;
+  efficiencyRatio: number;
+  segment: string;
+}
+
 export interface PlanResultMetrics {
   // Plot / regulatory limits (echoed from backend)
   plotAreaSqm?: number;
@@ -71,6 +82,8 @@ export interface PlanResultMetrics {
   copAreaSqft?: number;
   copStatus?: string;
   spacingRequiredM?: number;
+  // Sellable area summary
+  sellableSummary?: SellableSummary;
 }
 
 export interface PlanResultDto {
@@ -80,6 +93,175 @@ export interface PlanResultDto {
   geometry: PlanGeometryDto;
   metrics: PlanResultMetrics & SiteMetrics;
   debug?: { buildableEnvelope?: GeoJsonInput; copCandidateZones?: GeoJsonInput[]; roadNetwork?: GeoJsonInput[]; towerZones?: GeoJsonInput[] };
+}
+
+// ── AI planner scenarios ────────────────────────────────────────────────────────
+
+export interface ProgramSpecDto {
+  unit_mix: {
+    "1bhk_compact": number;
+    "2bhk_compact": number;
+    "2bhk_luxury": number;
+    "3bhk_luxury": number;
+  };
+  target_units: number;
+  preferred_towers: number;
+  max_floors: number;
+  open_space_priority: "low" | "medium" | "high";
+  density_priority: "low" | "medium" | "high";
+}
+
+export interface AIPlannerScenarioDto {
+  label: string;
+  tower_count: number;
+  fsi_target: number;
+  plan: PlanResultDto;
+  design_insights: string[];
+}
+
+export interface AIPlannerResponseDto {
+  program_spec: ProgramSpecDto;
+  scenarios: AIPlannerScenarioDto[];
+}
+
+export async function generateAIScenarios(payload: {
+  brief: string;
+  site_id: string;
+  inputs?: PlannerInputs;
+}): Promise<AIPlannerResponseDto> {
+  return httpRequest<AIPlannerResponseDto, {
+    brief: string;
+    site_id: string;
+    inputs?: PlannerInputs;
+  }>("/api/planner/ai_scenarios", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export interface PlanCritiqueResponse {
+  insights: string[];
+}
+
+export async function getPlanCritique(
+  jobId: string,
+  userNote?: string,
+): Promise<PlanCritiqueResponse> {
+  return httpRequest<PlanCritiqueResponse, { user_note: string }>(
+    `/api/development/plan-jobs/${jobId}/critique/`,
+    {
+      method: "POST",
+      body: { user_note: userNote ?? "" },
+    },
+  );
+}
+
+// ── Feasibility analysis ────────────────────────────────────────────────────
+
+export interface FloorPlanCompat {
+  canFit1bhk: boolean;
+  canFit2bhk: boolean;
+  canFit3bhk: boolean;
+  canFit4bhk: boolean;
+  canFit5bhk: boolean;
+  estimatedUnitsPerFloor: number;
+  footprintWidthM: number;
+  footprintDepthM: number;
+  coreType: string;
+  notes: string[];
+}
+
+export interface TowerOption {
+  nTowers: number;
+  isFeasible: boolean;
+  minFloors: number;
+  maxFloors: number;
+  estimatedFootprintSqm: number;
+  estimatedFsiAtMax: number;
+  heightBand: string;
+  footprintWidthM: number;
+  footprintDepthM: number;
+  floorPlanNotes: string[];
+  floorPlanCompat?: FloorPlanCompat;
+  reason: string;
+}
+
+export interface BuildingTypeOption {
+  id: number;
+  label: string;
+  effectiveMaxFloors: number;
+  maxHeightM: number;
+  liftRequired: boolean;
+  fireStairRequired: boolean;
+  copRequired: boolean;
+  typicalEfficiency: number;
+}
+
+export interface CoreConfigOption {
+  unitsPerCore: number;
+  segment: string;
+  label: string;
+  preferredPattern: string;
+}
+
+export interface SellableEstimate {
+  achievedFsi: number;
+  sellablePerYard: number;
+  totalSellableSqft: number;
+  efficiencyRatio: number;
+}
+
+export interface FeasibilityResponse {
+  plotId: string;
+  plotAreaSqm: number;
+  maxHeightM: number;
+  maxFloors: number;
+  maxFSI: number;
+  maxGCPct: number;
+  roadWidthM: number;
+  maxFeasibleTowers: number;
+  recommendedTowers: number;
+  recommendedFloors: number;
+  recommendationReason: string;
+  suggestions: string[];
+  towerOptions: TowerOption[];
+  floorPlanCompat?: FloorPlanCompat;
+  permissibleBuildingTypes?: BuildingTypeOption[];
+  coreConfigs?: CoreConfigOption[];
+  sellableEstimate?: SellableEstimate;
+}
+
+export interface FeasibilityValidation {
+  isValid: boolean;
+  warnings: string[];
+  errors: string[];
+  suggestions: string[];
+  feasibility: FeasibilityResponse;
+}
+
+export async function getFeasibility(
+  plotId: string,
+): Promise<FeasibilityResponse> {
+  return httpRequest<FeasibilityResponse>(
+    `/api/development/feasibility/${encodeURIComponent(plotId)}/`,
+    { method: "GET" },
+  );
+}
+
+export async function validateFeasibility(
+  plotId: string,
+  payload: {
+    towerCount: number | "auto";
+    minFloors?: number;
+    maxFloors?: number;
+    unitMix?: string[];
+    storeyHeightM?: number;
+  },
+): Promise<FeasibilityValidation> {
+  return httpRequest<FeasibilityValidation, typeof payload>(
+    `/api/development/feasibility/${encodeURIComponent(plotId)}/validate/`,
+    { method: "POST", body: payload },
+  );
 }
 
 export async function getSiteMetrics(
@@ -109,12 +291,12 @@ export async function startPlanJob(
 export async function getPlanJobStatus(
   jobId: string,
 ): Promise<PlanJobStatus> {
-  return httpRequest<PlanJobStatus>(
+  const raw = await httpRequest<PlanJobStatus>(
     `/api/development/plan-jobs/${jobId}/status/`,
-    {
-      method: "GET",
-    },
+    { method: "GET" },
   );
+  // Backend returns UPPERCASE status ("PENDING", "RUNNING", etc.) — normalise to lowercase.
+  return { ...raw, status: raw.status?.toLowerCase() as PlanJobStatusValue };
 }
 
 export async function getPlanJobResult(
@@ -126,6 +308,72 @@ export async function getPlanJobResult(
       method: "GET",
     },
   );
+}
+
+// ── Placement debug types ─────────────────────────────────────────────────────
+
+/** Scalar quality metrics emitted by the placement engine instrumentation. */
+export interface PlacementDebugMetrics {
+  // The 8 required metrics
+  envelope_area_sqft: number;
+  footprint_area_sqft: number;
+  leftover_area_sqft: number;
+  leftover_compactness_score: number;
+  road_frontage_length_m: number;
+  tower_orientation_angles_deg: number[];
+  cop_area_sqft: number;
+  cop_min_dimension_m: number;
+  // Derived ratios
+  footprint_utilization_pct: number;
+  leftover_utilization_pct: number;
+  n_towers_placed: number;
+  // Dominant open-space heuristic
+  open_space_consolidation?: number;
+  largest_open_area_sqft?: number;
+  edge_alignment_ratio?: number;
+}
+
+export interface PlacementDebugFeatureProperties {
+  layer:
+    | "buildable_envelope"
+    | "spacing_buffer"
+    | "leftover_polygon"
+    | "selected_footprint"
+    | "cop_area";
+  label?: string;
+  area_sqft?: number;
+  tower_index?: number;
+  spacing_required_m?: number;
+  min_dimension_m?: number;
+  cop_strategy?: string | null;
+  compactness_score?: number;
+  width_m?: number;
+  depth_m?: number;
+  orientation_angle_deg?: number;
+  orientation_label?: string;
+  aspect_ratio?: number;
+}
+
+export interface PlacementDebugFeature {
+  type: "Feature";
+  geometry: {
+    type: "Polygon" | "MultiPolygon";
+    coordinates: number[][][] | number[][][][];
+  };
+  properties: PlacementDebugFeatureProperties;
+}
+
+export interface PlacementDebugGeoJson {
+  type: "FeatureCollection";
+  features: PlacementDebugFeature[];
+  metadata?: {
+    n_towers_placed: number;
+    building_height_m: number;
+    spacing_required_m: number;
+    packing_mode: string | null;
+    coordinate_system: string;
+    layer_order: string[];
+  };
 }
 
 // ── Floor plan generation ─────────────────────────────────────────────────────
@@ -140,7 +388,7 @@ export interface FloorPlanRequest {
 }
 
 export interface FloorPlanFeatureProperties {
-  layer: "footprint_bg" | "corridor" | "core" | "stair" | "lobby" | "lift" | "unit" | "balcony";
+  layer: "footprint_bg" | "corridor" | "core" | "stair" | "lobby" | "lift" | "unit" | "balcony" | "room" | "wall" | "door" | "window";
   label?: string;
   area_sqm?: number;
   unit_id?: string;
@@ -164,6 +412,11 @@ export interface FloorPlanFeatureProperties {
   ventilation_ok?: boolean;
   required_window_sqm?: number;
   available_window_sqm?: number;
+  // Room subdivision
+  room_type?: string;
+  // Wall lines
+  wall_type?: "external" | "party" | "internal" | "entry";
+  thickness_m?: number;
 }
 
 export interface FloorPlanFeature {
@@ -253,6 +506,9 @@ export interface FloorPlanResponse {
   status: "ok" | "error";
   layout: FloorPlanLayout;
   metrics: FloorPlanMetrics;
+  /** Populated when the backend runs through the full development pipeline. */
+  placement_debug_metrics?: PlacementDebugMetrics;
+  placement_debug_geojson?: PlacementDebugGeoJson;
   error?: string;
 }
 
@@ -261,6 +517,83 @@ export async function generateFloorPlan(
 ): Promise<FloorPlanResponse> {
   return httpRequest<FloorPlanResponse, FloorPlanRequest>(
     "/api/development/floor-plan/",
+    { method: "POST", body: payload },
+  );
+}
+
+// ── Floor core (circulation core) generation ──────────────────────────────────
+
+export interface FloorCoreRequest {
+  footprint: { type: "Polygon"; coordinates: number[][][] };
+  n_floors: number;
+  building_height_m: number;
+  target_units_per_floor?: number;
+  orientation_deg?: number | null;
+  tower_type?: string;
+}
+
+export interface FloorCoreGraphNode {
+  id: string;
+  type: string;
+  centroid: [number, number];
+  degree: number;
+}
+
+export interface FloorCoreGraphEdge {
+  from: string;
+  to: string;
+  distance_m: number;
+}
+
+export interface FloorCoreMetrics {
+  core_type: string;
+  n_lifts: number;
+  n_stairs: number;
+  core_area_sqm: number;
+  corridor_area_sqm: number;
+  circulation_pct: number;
+  footprint_area_sqm: number;
+  max_travel_distance_m: number;
+  stair_separation_m: number;
+}
+
+export interface FloorCoreCapacity {
+  people_per_lift: number;
+  stair_capacity_persons_per_min: number;
+  corridor_density_persons_per_m: number;
+}
+
+export interface FloorCoreCompliance {
+  corridor_width_ok: boolean;
+  travel_distance_ok: boolean;
+  travel_distance_max_m: number;
+  dead_end_ok: boolean;
+  dead_end_max_m: number;
+  dead_end_count: number;
+  stair_separation_ok: boolean;
+  stair_separation_m: number;
+  stair_separation_required_m: number;
+  violations: string[];
+  warnings: string[];
+}
+
+export interface FloorCoreResponse {
+  status: "ok" | "error";
+  core_type: string;
+  layout: FloorPlanLayout;
+  graph: { nodes: FloorCoreGraphNode[]; edges: FloorCoreGraphEdge[] };
+  metrics: FloorCoreMetrics;
+  capacity: FloorCoreCapacity | null;
+  compliance: FloorCoreCompliance;
+  corridor_centerline?: { type: "LineString"; coordinates: number[][] } | null;
+  error?: string;
+}
+
+export async function generateFloorCore(
+  payload: FloorCoreRequest,
+): Promise<FloorCoreResponse> {
+  return httpRequest<FloorCoreResponse, FloorCoreRequest>(
+    "/api/development/floor-core/",
     { method: "POST", body: payload },
   );
 }

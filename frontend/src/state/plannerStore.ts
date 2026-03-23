@@ -25,6 +25,13 @@ export type PlannerSelection = {
 
 export type PlanningStep = "site" | "floor" | "unit";
 
+/** Two-stage planner workspace lifecycle (input → site-generating → site-generated → floor-design). */
+export type PlannerStage =
+  | "input"
+  | "site-generating"
+  | "site-generated"
+  | "floor-design";
+
 export type SelectedUnitInfo = {
   id: string;
   unitType?: string;
@@ -47,7 +54,24 @@ export type PlannerScenario = {
   createdAt: string;
 };
 
+/** User's saved location in the hierarchy (Country → State → District → TP). Persisted per user. */
+export type LocationPreference = {
+  countryCode: string;
+  stateCode: string;
+  districtName: string;
+  tpId: string;
+};
+
+const defaultLocationPreference: LocationPreference = {
+  countryCode: "IN",
+  stateCode: "GJ",
+  districtName: "Surat",
+  tpId: "TP14",
+};
+
 type PlannerState = {
+  /** Saved location hierarchy (persisted to localStorage). */
+  locationPreference: LocationPreference;
   selectedPlotId: string | null;
   activeScenarioId: string | null;
   inputs: PlannerInputs;
@@ -56,6 +80,8 @@ type PlannerState = {
   isInputsPanelOpen: boolean;
   scenarios: PlannerScenario[];
   planningStep: PlanningStep;
+  /** Two-stage workspace stage (used by PlannerWorkspace). */
+  plannerStage: PlannerStage;
   selectedTowerIndex: number | null;
   selectedUnit: SelectedUnitInfo | null;
   debugMode: boolean;
@@ -74,10 +100,12 @@ type PlannerActions = {
   removeScenario: (id: string) => void;
   resetForPlot: (plotId: string | null) => void;
   setPlanningStep: (step: PlanningStep) => void;
+  setPlannerStage: (stage: PlannerStage) => void;
   setSelectedTowerIndex: (index: number | null) => void;
   setSelectedUnit: (unit: SelectedUnitInfo | null) => void;
   setDebugMode: (enabled: boolean) => void;
   toggleDebugMode: () => void;
+  setLocationPreference: (pref: Partial<LocationPreference>) => void;
 };
 
 export type PlannerStore = PlannerState & PlannerActions;
@@ -101,14 +129,19 @@ const defaultLayerVisibility: PlannerLayerVisibility = {
 };
 
 const defaultInputs: PlannerInputs = {
-  unitMix: ["2BHK", "3BHK"],
+  buildingType: 3,
+  floors: null,
   segment: "mid",
-  towerCount: "auto",
-  preferredFloors: {},
-  vastu: false,
+  unitsPerCore: 4,
+  nBuildings: null,
+  unitMix: ["2BHK", "3BHK"],
+  storeyHeightM: 3.0,
 };
 
+const LOCATION_PREFERENCE_KEY = "planner_location_preference";
+
 export const usePlannerStore = create<PlannerStore>((set) => ({
+  locationPreference: defaultLocationPreference,
   selectedPlotId: null,
   activeScenarioId: null,
   inputs: defaultInputs,
@@ -117,6 +150,7 @@ export const usePlannerStore = create<PlannerStore>((set) => ({
   isInputsPanelOpen: false,
   scenarios: [],
   planningStep: "site",
+  plannerStage: "input",
   selectedTowerIndex: null,
   selectedUnit: null,
   debugMode: false,
@@ -129,6 +163,7 @@ export const usePlannerStore = create<PlannerStore>((set) => ({
         plotId === state.selectedPlotId ? state.scenarios : [],
       inputs: defaultInputs,
       selection: null,
+      plannerStage: plotId === state.selectedPlotId ? state.plannerStage : "input",
     })),
 
   setActiveScenarioId: (scenarioId) =>
@@ -141,10 +176,6 @@ export const usePlannerStore = create<PlannerStore>((set) => ({
       inputs: {
         ...state.inputs,
         ...partial,
-        preferredFloors: {
-          ...(state.inputs.preferredFloors ?? {}),
-          ...(partial.preferredFloors ?? {}),
-        },
       },
     })),
 
@@ -193,14 +224,31 @@ export const usePlannerStore = create<PlannerStore>((set) => ({
       scenarios: [],
       isInputsPanelOpen: true,
       planningStep: "site",
+      plannerStage: "input",
       selectedTowerIndex: null,
       selectedUnit: null,
     })),
+
+  setPlannerStage: (stage) => set({ plannerStage: stage }),
 
   setPlanningStep: (step) => set({ planningStep: step }),
   setSelectedTowerIndex: (index) => set({ selectedTowerIndex: index, selectedUnit: null }),
   setSelectedUnit: (unit) => set({ selectedUnit: unit }),
   setDebugMode: (enabled) => set({ debugMode: enabled }),
   toggleDebugMode: () => set((s) => ({ debugMode: !s.debugMode })),
+
+  setLocationPreference: (pref) => {
+    set((state) => {
+      const next = { ...state.locationPreference, ...pref };
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(LOCATION_PREFERENCE_KEY, JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+      }
+      return { locationPreference: next };
+    });
+  },
 }));
 
