@@ -39,6 +39,16 @@ class AIConfig:
     evaluator_model: str = "gpt-4o-mini"
     interpreter_model: str = "gpt-4o-mini"
 
+    # Floor plan generation
+    floor_plan_model: str = "gpt-4o"
+    floor_plan_timeout_s: float = 45.0
+    floor_plan_max_tokens: int = 4096
+
+    # Plot exploration scenario generation
+    exploration_model: str = "gpt-4o"
+    exploration_timeout_s: float = 30.0
+    exploration_max_tokens: int = 2048
+
     # Token limits
     advisor_input_max_tokens: int = 500
     evaluator_input_max_tokens: int = 800
@@ -62,14 +72,28 @@ class AIConfig:
 
 
 def get_ai_config() -> AIConfig:
-    """Build AIConfig from environment. Feature flags default off."""
+    """
+    Build AIConfig from environment.
+
+    Feature flags default to True when OPENAI_API_KEY is set (auto-enable on
+    key presence).  Explicit env vars still override: set AI_ADVISOR_ENABLED=0
+    to disable even when the key is present.
+    """
+    key_present = bool(os.environ.get("OPENAI_API_KEY", "").strip())
+    default_on = key_present  # auto-enable all features when key is present
     return AIConfig(
-        advisor_enabled=_bool_env("AI_ADVISOR_ENABLED", False),
-        evaluator_enabled=_bool_env("AI_EVALUATOR_ENABLED", False),
-        constraint_interpreter_enabled=_bool_env("AI_CONSTRAINT_INTERPRETER_ENABLED", False),
+        advisor_enabled=_bool_env("AI_ADVISOR_ENABLED", default_on),
+        evaluator_enabled=_bool_env("AI_EVALUATOR_ENABLED", default_on),
+        constraint_interpreter_enabled=_bool_env("AI_CONSTRAINT_INTERPRETER_ENABLED", default_on),
         advisor_model=os.environ.get("OPENAI_ADVISOR_MODEL", "gpt-4o-mini"),
         evaluator_model=os.environ.get("OPENAI_EVALUATOR_MODEL", "gpt-4o-mini"),
         interpreter_model=os.environ.get("OPENAI_INTERPRETER_MODEL", "gpt-4o-mini"),
+        floor_plan_model=os.environ.get("OPENAI_FLOOR_PLAN_MODEL", "gpt-4o"),
+        floor_plan_timeout_s=_float_env("AI_FLOOR_PLAN_TIMEOUT_S", 45.0),
+        floor_plan_max_tokens=_int_env("AI_FLOOR_PLAN_MAX_TOKENS", 4096),
+        exploration_model=os.environ.get("OPENAI_EXPLORATION_MODEL", "gpt-4o"),
+        exploration_timeout_s=_float_env("AI_EXPLORATION_TIMEOUT_S", 30.0),
+        exploration_max_tokens=_int_env("AI_EXPLORATION_MAX_TOKENS", 2048),
         advisor_input_max_tokens=_int_env("AI_ADVISOR_INPUT_MAX_TOKENS", 500),
         evaluator_input_max_tokens=_int_env("AI_EVALUATOR_INPUT_MAX_TOKENS", 800),
         interpreter_input_max_tokens=_int_env("AI_INTERPRETER_INPUT_MAX_TOKENS", 4000),
