@@ -49,6 +49,29 @@ class AIConfig:
     exploration_timeout_s: float = 30.0
     exploration_max_tokens: int = 2048
 
+    # AI site plan generation
+    site_plan_model: str = "gpt-4o"
+    site_plan_timeout_s: float = 45.0
+    site_plan_max_tokens: int = 4096
+    site_plan_max_retries: int = 5
+
+    # Claude / model toggle
+    floor_plan_ai_model: str = "claude"  # "claude" | "gpt-4o"
+    claude_model: str = "claude-sonnet-4-6"
+    claude_timeout_s: float = 60.0
+    claude_max_tokens: int = 8192
+
+    # Floor plan preview image (HF text-to-image; separate from layout pipeline)
+    hf_image_model: str = "black-forest-labs/FLUX.1-schnell"
+    hf_image_timeout_s: float = 120.0
+
+    # DALL-E 3 floor plan image generation
+    floor_plan_image_enabled: bool = True
+    dalle_model: str = "dall-e-3"
+    dalle_size: str = "1792x1024"
+    dalle_quality: str = "hd"
+    dalle_timeout_s: float = 30.0
+
     # Token limits
     advisor_input_max_tokens: int = 500
     evaluator_input_max_tokens: int = 800
@@ -70,6 +93,21 @@ class AIConfig:
     def has_api_key(self) -> bool:
         return bool(self.api_key)
 
+    @property
+    def claude_api_key(self) -> Optional[str]:
+        return os.environ.get("CLAUDE_API_KEY")
+
+    def has_claude_api_key(self) -> bool:
+        return bool(self.claude_api_key)
+
+    @property
+    def huggingface_api_token(self) -> Optional[str]:
+        return (
+            os.environ.get("HUGGINGFACE_API_TOKEN")
+            or os.environ.get("HF_TOKEN")
+            or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        )
+
 
 def get_ai_config() -> AIConfig:
     """
@@ -89,11 +127,15 @@ def get_ai_config() -> AIConfig:
         evaluator_model=os.environ.get("OPENAI_EVALUATOR_MODEL", "gpt-4o-mini"),
         interpreter_model=os.environ.get("OPENAI_INTERPRETER_MODEL", "gpt-4o-mini"),
         floor_plan_model=os.environ.get("OPENAI_FLOOR_PLAN_MODEL", "gpt-4o"),
-        floor_plan_timeout_s=_float_env("AI_FLOOR_PLAN_TIMEOUT_S", 45.0),
-        floor_plan_max_tokens=_int_env("AI_FLOOR_PLAN_MAX_TOKENS", 4096),
+        floor_plan_timeout_s=_float_env("AI_FLOOR_PLAN_TIMEOUT_S", 60.0),
+        floor_plan_max_tokens=_int_env("AI_FLOOR_PLAN_MAX_TOKENS", 8192),
         exploration_model=os.environ.get("OPENAI_EXPLORATION_MODEL", "gpt-4o"),
         exploration_timeout_s=_float_env("AI_EXPLORATION_TIMEOUT_S", 30.0),
         exploration_max_tokens=_int_env("AI_EXPLORATION_MAX_TOKENS", 2048),
+        site_plan_model=os.environ.get("OPENAI_SITE_PLAN_MODEL", "gpt-4o"),
+        site_plan_timeout_s=_float_env("AI_SITE_PLAN_TIMEOUT_S", 45.0),
+        site_plan_max_tokens=_int_env("AI_SITE_PLAN_MAX_TOKENS", 4096),
+        site_plan_max_retries=_int_env("AI_SITE_PLAN_MAX_RETRIES", 5),
         advisor_input_max_tokens=_int_env("AI_ADVISOR_INPUT_MAX_TOKENS", 500),
         evaluator_input_max_tokens=_int_env("AI_EVALUATOR_INPUT_MAX_TOKENS", 800),
         interpreter_input_max_tokens=_int_env("AI_INTERPRETER_INPUT_MAX_TOKENS", 4000),
@@ -101,6 +143,17 @@ def get_ai_config() -> AIConfig:
         evaluator_timeout_s=_float_env("AI_EVALUATOR_TIMEOUT_S", 15.0),
         interpreter_timeout_s=_float_env("AI_INTERPRETER_TIMEOUT_S", 30.0),
         temperature=_float_env("OPENAI_TEMPERATURE", 0.0),
+        floor_plan_ai_model=os.environ.get("FLOOR_PLAN_AI_MODEL", "claude"),
+        claude_model=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6"),
+        claude_timeout_s=_float_env("CLAUDE_TIMEOUT_S", 60.0),
+        claude_max_tokens=_int_env("CLAUDE_MAX_TOKENS", 8192),
+        hf_image_model=os.environ.get("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell"),
+        hf_image_timeout_s=_float_env("HF_IMAGE_TIMEOUT_S", 120.0),
+        floor_plan_image_enabled=_bool_env("FLOOR_PLAN_IMAGE_ENABLED", True),
+        dalle_model=os.environ.get("DALLE_MODEL", "dall-e-3"),
+        dalle_size=os.environ.get("DALLE_SIZE", "1792x1024"),
+        dalle_quality=os.environ.get("DALLE_QUALITY", "hd"),
+        dalle_timeout_s=_float_env("DALLE_TIMEOUT_S", 30.0),
     )
 
 
