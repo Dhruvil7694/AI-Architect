@@ -82,6 +82,9 @@ export interface PlanResultMetrics {
   copAreaSqft?: number;
   copStatus?: string;
   spacingRequiredM?: number;
+  // Generation metadata
+  generationSource?: "ai" | "deterministic";
+  designRationale?: string | null;
   // Sellable area summary
   sellableSummary?: SellableSummary;
 }
@@ -521,6 +524,92 @@ export async function generateFloorPlan(
   );
 }
 
+// ── AI Floor Plan generation (GPT-4o) ─────────────────────────────────────────
+
+export interface AIFloorPlanRequest {
+  footprint: { type: "Polygon"; coordinates: number[][][] };
+  n_floors: number;
+  building_height_m: number;
+  units_per_core?: number;
+  building_type?: number;
+  segment?: string;
+  unit_mix?: string[];
+  storey_height_m?: number;
+  plot_area_sqm?: number;
+  design_brief?: string;
+}
+
+export interface AIFloorPlanMetrics {
+  footprintSqm: number;
+  floorLengthM: number;
+  floorWidthM: number;
+  coreSqm: number;
+  corridorSqm: number;
+  circulationSqm: number;
+  balconySqmPerFloor: number;
+  unitAreaPerFloorSqm: number;
+  nUnitsPerFloor: number;
+  nTotalUnits: number;
+  unitTypeCounts: Record<string, number>;
+  nFloors: number;
+  buildingHeightM: number;
+  storeyHeightM: number;
+  netBuaSqm: number;
+  grossBuaSqm: number;
+  achievedFSINet: number;
+  achievedFSIGross: number;
+  efficiencyPct: number;
+  nLifts: number;
+  nStairs: number;
+}
+
+export interface AIFloorPlanResponse {
+  status: "ok" | "error";
+  source: "ai";
+  layout: FloorPlanLayout;
+  layout_json?: Record<string, unknown>;
+  architectural_image: string | null;   // base64 PNG from DALL-E 3
+  presentation_image: string | null;    // base64 PNG from DALL-E 3
+  svg_blueprint: string;                // SVG fallback, always present
+  metrics: AIFloorPlanMetrics;
+  design_notes: string;
+  error?: string;
+}
+
+export async function generateAIFloorPlan(
+  payload: AIFloorPlanRequest,
+): Promise<AIFloorPlanResponse> {
+  return httpRequest<AIFloorPlanResponse, AIFloorPlanRequest>(
+    "/api/development/ai-floor-plan/",
+    { method: "POST", body: payload },
+  );
+}
+
+// ── Floor plan preview image (text-to-image; separate from layout pipeline) ───
+
+export interface FloorPlanPreviewImageRequest extends AIFloorPlanRequest {
+  /** Optional: notes from the last AI floor plan response */
+  design_notes?: string;
+  /** Optional: metrics from the last AI floor plan (enriches the image prompt) */
+  ai_metrics?: Partial<AIFloorPlanMetrics>;
+}
+
+export interface FloorPlanPreviewImageResponse {
+  status: "ok";
+  mime_type: string;
+  image_base64: string;
+  prompt_used: string;
+}
+
+export async function generateFloorPlanPreviewImage(
+  payload: FloorPlanPreviewImageRequest,
+): Promise<FloorPlanPreviewImageResponse> {
+  return httpRequest<FloorPlanPreviewImageResponse, FloorPlanPreviewImageRequest>(
+    "/api/development/floor-plan-preview-image/",
+    { method: "POST", body: payload },
+  );
+}
+
 // ── Floor core (circulation core) generation ──────────────────────────────────
 
 export interface FloorCoreRequest {
@@ -647,6 +736,87 @@ export interface UnitInteriorResponse {
   rooms: UnitRoomData[];
   gdcr_summary: UnitGdcrSummary;
   warnings: string[];
+}
+
+// ── Plot Exploration (Step 1) ─────────────────────────────────────────────────
+
+export interface ExplorationScenario {
+  id: string;
+  label: string;
+  description: string;
+  towers: number;
+  floors: number;
+  buildingType: 1 | 2 | 3;
+  segment: "budget" | "mid" | "premium" | "luxury";
+  unitMix: string[];
+  unitsPerCore: 2 | 4 | 6;
+  estimatedFSI: number;
+  estimatedSellableAreaSqm: number;
+  sellablePerSqYd: number;
+  estimatedTotalUnits: number;
+  tradeoffNote: string;
+}
+
+export interface PremiumTier {
+  fromFSI: number;
+  toFSI: number;
+  rate: number;
+}
+
+export interface SetbackAnnotation {
+  edgeIndex: number;
+  distanceM: number;
+  type: "road" | "side" | "rear";
+}
+
+export interface RoadEdgeAnnotation {
+  edgeIndex: number;
+  roadWidthM: number;
+  setbackM: number;
+}
+
+export interface ExplorationConstraints {
+  maxHeightM: number;
+  maxFloors: number;
+  maxFSI: number;
+  baseFSI: number;
+  corridorEligible: boolean;
+  corridorReason: string;
+  maxGroundCoverPct: number;
+  maxFeasibleTowers: number;
+  setbacks: { road: number; side: number; rear: number };
+  premiumTiers: PremiumTier[];
+  permissibleBuildingTypes: BuildingTypeOption[];
+}
+
+export interface PlotAnnotations {
+  roadEdges: RoadEdgeAnnotation[];
+  setbackDistances: SetbackAnnotation[];
+  envelopeCoords: number[][];
+}
+
+export interface ExplorationResponse {
+  plotSummary: {
+    plotId: string;
+    areaSqm: number;
+    roadWidthM: number;
+    zone: string;
+    authority: string;
+    designation: string;
+  };
+  constraints: ExplorationConstraints;
+  unitCompatibility: Record<string, boolean>;
+  scenarios: ExplorationScenario[];
+  plotAnnotations: PlotAnnotations;
+}
+
+export async function getPlotExploration(
+  plotId: string,
+): Promise<ExplorationResponse> {
+  return httpRequest<ExplorationResponse>(
+    `/api/development/explore/${encodeURIComponent(plotId)}/`,
+    { method: "GET" },
+  );
 }
 
 // Keep old types for backward compatibility
