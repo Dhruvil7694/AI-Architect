@@ -1,4 +1,5 @@
-"""Tests for floor plan image prompt builder."""
+"""Tests for floor plan image prompt builder (compressed + visual tokens)."""
+import base64
 import unittest
 
 
@@ -11,11 +12,15 @@ SAMPLE_LAYOUT = {
             "type": "3BHK",
             "carpet_area_sqm": 92.5,
             "side": "north",
+            "x": 0.0,
+            "y": 0.0,
+            "w": 10.0,
+            "h": 6.0,
             "rooms": [
-                {"type": "LIVING", "w": 5.5, "h": 4.0, "position": "north-west"},
-                {"type": "BEDROOM", "w": 4.0, "h": 3.5, "position": "north-east"},
-                {"type": "KITCHEN", "w": 3.5, "h": 3.0, "position": "south-east"},
-                {"type": "TOILET", "w": 2.0, "h": 2.5, "position": "south-west"},
+                {"type": "LIVING", "x": 1.0, "y": 3.0, "w": 5.5, "h": 4.0},
+                {"type": "BEDROOM", "x": 1.0, "y": 0.5, "w": 4.0, "h": 3.5},
+                {"type": "KITCHEN", "x": 6.5, "y": 3.0, "w": 3.5, "h": 3.0},
+                {"type": "TOILET", "x": 6.5, "y": 0.5, "w": 2.0, "h": 2.5},
             ],
         },
         {
@@ -23,10 +28,14 @@ SAMPLE_LAYOUT = {
             "type": "2BHK",
             "carpet_area_sqm": 65.0,
             "side": "south",
+            "x": 14.0,
+            "y": 0.0,
+            "w": 10.0,
+            "h": 6.0,
             "rooms": [
-                {"type": "LIVING", "w": 4.5, "h": 3.5, "position": "south-west"},
-                {"type": "BEDROOM", "w": 3.5, "h": 3.0, "position": "south-east"},
-                {"type": "KITCHEN", "w": 3.0, "h": 2.5, "position": "north-east"},
+                {"type": "LIVING", "x": 15.0, "y": 3.0, "w": 4.5, "h": 3.5},
+                {"type": "BEDROOM", "x": 15.0, "y": 0.5, "w": 3.5, "h": 3.0},
+                {"type": "KITCHEN", "x": 19.5, "y": 3.0, "w": 3.0, "h": 2.5},
             ],
         },
     ],
@@ -44,47 +53,68 @@ SAMPLE_METRICS = {
 }
 
 
+class TestBuildVisualTokens(unittest.TestCase):
+
+    def test_contains_spatial_hints(self):
+        from services.floor_plan_image_prompt import build_visual_tokens
+        t = build_visual_tokens(SAMPLE_LAYOUT)
+        assert "living" in t
+        assert "x" in t or "m" in t
+        assert "u1-" in t or "unit1" in t
+
+    def test_no_xy_emits_flag(self):
+        from services.floor_plan_image_prompt import build_visual_tokens
+        t = build_visual_tokens({
+            "units": [{"type": "2BHK", "rooms": [{"type": "living", "w": 4, "h": 3}]}],
+        })
+        assert "noXY" in t
+
+
 class TestBuildArchitecturalPrompt(unittest.TestCase):
 
     def test_returns_nonempty_string(self):
         from services.floor_plan_image_prompt import build_architectural_prompt
         result = build_architectural_prompt(SAMPLE_LAYOUT, SAMPLE_METRICS)
         assert isinstance(result, str)
-        assert len(result) > 100
+        assert len(result) > 40
 
-    def test_contains_key_architectural_terms(self):
+    def test_concise_word_budget(self):
         from services.floor_plan_image_prompt import build_architectural_prompt
         result = build_architectural_prompt(SAMPLE_LAYOUT, SAMPLE_METRICS)
-        assert "black and white" in result.lower() or "line drawing" in result.lower()
-        assert "24.0" in result  # floor length
-        assert "12.0" in result  # floor depth
-        assert "3BHK" in result
-        assert "2BHK" in result
+        n_words = len(result.split())
+        assert n_words < 260, f"prompt too long: {n_words} words"
 
-    def test_contains_scale_and_title(self):
+    def test_contains_key_terms(self):
         from services.floor_plan_image_prompt import build_architectural_prompt
-        result = build_architectural_prompt(SAMPLE_LAYOUT, SAMPLE_METRICS, segment="premium")
-        assert "1:100" in result
-        assert "Premium" in result
+        result = build_architectural_prompt(SAMPLE_LAYOUT, SAMPLE_METRICS)
+        assert "24" in result
+        assert "12" in result
+        assert "CAD" in result or "cad" in result.lower()
+        assert "no 3d" in result.lower()
+
+    def test_design_brief_ignored_in_prompt(self):
+        from services.floor_plan_image_prompt import build_architectural_prompt
+        result = build_architectural_prompt(
+            SAMPLE_LAYOUT, SAMPLE_METRICS, design_brief="Corner master with extra light"
+        )
+        assert "Corner master" not in result
+
+    def test_no_presentation_content(self):
+        from services.floor_plan_image_prompt import build_architectural_prompt
+        result = build_architectural_prompt(SAMPLE_LAYOUT, SAMPLE_METRICS)
+        assert "marble" not in result.lower()
+        assert "sofa" not in result.lower()
 
 
-class TestBuildPresentationPrompt(unittest.TestCase):
+class TestScoreGeneratedImages(unittest.TestCase):
 
-    def test_returns_nonempty_string(self):
-        from services.floor_plan_image_prompt import build_presentation_prompt
-        result = build_presentation_prompt(SAMPLE_LAYOUT, SAMPLE_METRICS)
-        assert isinstance(result, str)
-        assert len(result) > 100
-
-    def test_contains_furnishing_language(self):
-        from services.floor_plan_image_prompt import build_presentation_prompt
-        result = build_presentation_prompt(SAMPLE_LAYOUT, SAMPLE_METRICS, segment="luxury")
-        assert "marble" in result.lower() or "luxury" in result.lower()
-
-    def test_budget_segment_uses_basic_finishes(self):
-        from services.floor_plan_image_prompt import build_presentation_prompt
-        result = build_presentation_prompt(SAMPLE_LAYOUT, SAMPLE_METRICS, segment="budget")
-        assert "laminate" in result.lower() or "basic" in result.lower()
+    def test_picks_non_none(self):
+        from services.floor_plan_image_prompt import score_generated_images
+        raw = b"\x89PNG\r\n\x1a\n" + b"\x00" * 2000
+        b64 = base64.b64encode(raw).decode()
+        best, meta = score_generated_images([None, b64, b64], SAMPLE_LAYOUT)
+        assert best == b64
+        assert meta.get("picked_index") in (1, 2)
 
 
 if __name__ == "__main__":

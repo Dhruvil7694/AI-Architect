@@ -1,0 +1,62 @@
+Generate a luxury residential floor plan as a top-down orthographic view. Photorealistic architectural rendering with soft warm lighting. Magazine-quality real estate brochure presentation. Perfectly flat top-down — absolutely NO perspective, NO 3D, NO isometric view.
+
+FLOOR PLATE: 24.0m x 12.0m rectangular building footprint.
+Material palette: Polished vitrified tiles in living/dining (600x600mm, light grey). Ceramic floor tiles in bedrooms (wood-look). Modular kitchen with granite countertop and stainless-steel sink. Wall-mounted kitchen cabinets. Sanitary ware in white with chrome fittings. Walls in warm off-white.
+
+CENTRAL CORE:
+  - Marble-floored lift lobby with recessed ceiling lights
+  - 2 lift doors (brushed stainless steel finish)
+  - 2 enclosed staircases with anti-skid treads
+
+UNIT 1 — 2BHK (65.0 sqm) on NORTH side:
+  ENTRY:
+    - Wooden main door with handle, opening into foyer
+    - Small foyer/entry passage with shoe cabinet niche
+    - Foyer transitions into living/dining area
+  FLOW: Entry → Foyer → Living/Dining → Passage → Bedrooms
+    - Living Room (5.0m x 4.0m): L-shaped sofa, glass coffee table, TV console with storage, sheer curtains, accent rug
+      Windows with natural light streaming in, balcony sliding door
+    - Dining area (adjacent to living, open-plan): 4-seater round dining table, pendant light above, sideboard
+    - Kitchen (3.5m x 3.0m): L-shaped modular counter, 4-burner hob, chimney, refrigerator space, wall cabinets
+      Connected to dining area, window for ventilation
+    - Internal passage (1.05m wide): connects living to bedroom wing
+    - Master Bedroom (4.0m x 3.5m): king-size bed with upholstered headboard, two side tables with lamps, sliding wardrobe
+      En-suite bathroom door visible, window with curtains
+    - Bedroom 2 (3.5m x 3.0m): king-size bed with upholstered headboard, two side tables with lamps, sliding wardrobe
+    - En-suite Bathroom (2.0m x 2.5m): wall-hung WC, counter-top basin on vanity, large mirror, glass shower partition
+    - Common Bathroom (1.5m x 2.0m): wall-hung WC, counter-top basin on vanity, large mirror, glass shower partition
+    - Balcony: planters with greenery, small bistro table with two chairs, railing visible
+
+UNIT 2 — 3BHK (92.5 sqm) on SOUTH side:
+  ENTRY:
+    - Wooden main door with handle, opening into foyer
+    - Small foyer/entry passage with shoe cabinet niche
+    - Foyer transitions into living/dining area
+  FLOW: Entry → Foyer → Living/Dining → Passage → Bedrooms
+    - Living Room (5.5m x 4.5m): L-shaped sofa, glass coffee table, TV console with storage, sheer curtains, accent rug
+      Windows with natural light streaming in, balcony sliding door
+    - Dining area (adjacent to living, open-plan): 4-seater round dining table, pendant light above, sideboard
+    - Kitchen (3.5m x 3.0m): L-shaped modular counter, 4-burner hob, chimney, refrigerator space, wall cabinets
+      Connected to dining area, window for ventilation
+    - Internal passage (1.05m wide): connects living to bedroom wing
+    - Master Bedroom (4.0m x 3.5m): king-size bed with upholstered headboard, two side tables with lamps, sliding wardrobe
+      En-suite bathroom door visible, window with curtains
+    - Bedroom 2 (3.5m x 3.0m): king-size bed with upholstered headboard, two side tables with lamps, sliding wardrobe
+    - Bedroom 3 (3.5m x 3.0m): king-size bed with upholstered headboard, two side tables with lamps, sliding wardrobe
+    - En-suite Bathroom (2.0m x 2.5m): wall-hung WC, counter-top basin on vanity, large mirror, glass shower partition
+    - Common Bathroom (1.5m x 2.0m): wall-hung WC, counter-top basin on vanity, large mirror, glass shower partition
+    - Balcony: planters with greenery, small bistro table with two chairs, railing visible
+
+SPATIAL RULES:
+  - Wet zones (kitchens, bathrooms) share common wall for plumbing
+  - All rooms clearly separated by walls with doors
+  - No room floating without wall connections
+  - Every room labelled with its name
+  - Colour-coded rooms: living=warm beige, bedrooms=soft blue, kitchen=light green, bathrooms=light teal
+
+OUTPUT REQUIREMENTS:
+  - Perfectly flat top-down orthographic view — NO perspective, NO angle, NO 3D
+  - Clean edges, crisp wall lines, every room visible and labelled
+  - Warm ambient lighting with soft shadows for depth
+  - Magazine-quality rendering suitable for real estate brochure
+  - White background outside the floor plate boundary

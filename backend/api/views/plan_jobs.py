@@ -15,6 +15,7 @@ from api.serializers.plan_jobs import (
     PlanJobStatusSerializer,
     PlanJobResultSerializer,
 )
+from architecture.models import PlanJob
 
 
 class PlanJobCreateAPIView(APIView):
@@ -59,5 +60,44 @@ class PlanJobResultAPIView(APIView):
 
         serializer = PlanJobResultSerializer(result_payload)
         return Response(serializer.data)
+
+
+class PlanJobCritiqueAPIView(APIView):
+    """
+    POST /api/development/plan-jobs/{job_id}/critique/
+
+    Run the AI design critic on a completed plan job and return 3-5 bullet
+    insights about open space, tower placement, COP, density, and FSI
+    utilisation.
+
+    Falls back to the rule-based critic when AI is unavailable so the
+    endpoint always returns useful output.
+    """
+
+    def post(self, request: Request, job_id: str, *args, **kwargs) -> Response:
+        try:
+            job = PlanJob.objects.get(id=job_id)
+        except PlanJob.DoesNotExist:
+            return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if job.status != PlanJob.STATUS_COMPLETED or not job.result_json:
+            return Response(
+                {"detail": "Plan job is not yet completed"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        plan_metrics = job.result_json.get("metrics") or {}
+
+        # Optional: the caller may POST a free-form user_note to enrich the prompt.
+        user_note: str = (request.data or {}).get("user_note", "") or ""
+
+        from ai_planner.design_critic import generate_design_insights
+        insights = generate_design_insights(
+            placement_debug_metrics={},
+            plan_metrics=plan_metrics,
+            user_note=user_note,
+        )
+
+        return Response({"insights": insights}, status=status.HTTP_200_OK)
 
 

@@ -27,6 +27,8 @@ from residential_layout.errors import UnresolvedLayoutError
 from residential_layout.frames import ComposerFrame
 from residential_layout.models import UnitLayoutContract
 from residential_layout.orchestrator import resolve_unit_layout
+from ai_planner.program_generator import ProgramSpec
+from planning.unit_library import UNIT_LIBRARY
 
 # ── Constants (plan Section 3) ───────────────────────────────────────────────────
 
@@ -295,6 +297,7 @@ def repeat_band(
     zone: UnitZone,
     frame: ComposerFrame,
     module_width_m: Optional[float] = None,
+    program_spec: Optional[ProgramSpec] = None,
 ) -> BandLayoutContract:
     """
     Phase 3 entry point: slice band into N segments, resolve one unit per slice, return BandLayoutContract.
@@ -302,8 +305,31 @@ def repeat_band(
     Caller should pass explicit module_width_m when density matters; None uses DEFAULT_MODULE_WIDTH_M.
     On any slice UnresolvedLayoutError, aborts entire band (BandRepetitionError).
     """
+    # Attach ProgramSpec hint to the frame so downstream unit resolution can
+    # see it. ComposerFrame does not declare this attribute, so use setattr.
+    if program_spec is not None:
+        setattr(frame, "program_spec", program_spec)
+
     if module_width_m is None:
         module_width_m = DEFAULT_MODULE_WIDTH_M
+
+        # Optional ProgramSpec-based override: adjust module width to better match
+        # the dominant unit size when provided.
+        if program_spec is not None and program_spec.unit_mix:
+            # Dominant unit type by ratio.
+            dominant_unit = max(
+                program_spec.unit_mix.items(),
+                key=lambda kv: float(kv[1] or 0.0),
+            )[0]
+            info = UNIT_LIBRARY.get(dominant_unit)
+            if info is not None:
+                unit_area = float(info["unit_area_sqm"] or 0.0)
+                if unit_area > 0.0:
+                    # Assume typical depth ~10.5 m to back out a sensible module width.
+                    est_width = unit_area / 10.5
+                    # Clamp to a reasonable residential band width.
+                    est_width = max(4.0, min(est_width, 14.0))
+                    module_width_m = est_width
 
     band_length_m = frame.band_length_m
     band_id = frame.band_id
@@ -327,7 +353,10 @@ def repeat_band(
         slice_zones.append(slice_zone)
         slice_frame = _build_slice_frame(frame, i, module_width_m)
         try:
-            contract = resolve_unit_layout(slice_zone, slice_frame)
+            contract = resolve_unit_layout(
+                slice_zone,
+                slice_frame,
+            )
             contract.unit_id = f"{band_id}_{i}"
             units.append(contract)
         except UnresolvedLayoutError as e:

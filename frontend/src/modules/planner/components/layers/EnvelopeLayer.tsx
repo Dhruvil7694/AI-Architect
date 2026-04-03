@@ -25,8 +25,8 @@ export function EnvelopeLayer({
           key={feature.id}
           feature={feature}
           viewTransform={viewTransform}
-          fill="rgba(251,243,219,0.55)"
-          stroke="#d97706"
+          fill="rgba(20,184,166,0.08)"
+          stroke="#0d9488"
           strokeWidth={1.5}
           strokeDasharray="6 3"
           onMouseEnter={() => onFeatureHover?.(feature)}

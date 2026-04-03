@@ -6,20 +6,59 @@ import {
   getPlanJobStatus,
   getPlanJobResult,
   generateFloorPlan,
+  generateFloorCore,
   generateUnitInterior,
+  generateAIScenarios,
+  generateAIFloorPlan,
+  generateFloorPlanPreviewImage,
+  getPlanCritique,
+  getFeasibility,
+  getPlotExploration,
+  type ExplorationResponse,
   type SiteMetrics,
   type PlanGenerationRequest,
   type PlanJobStatus,
   type PlanResultDto,
   type FloorPlanRequest,
   type FloorPlanResponse,
+  type FloorCoreRequest,
+  type FloorCoreResponse,
   type UnitInteriorRequest,
   type UnitInteriorResponse,
+  type AIFloorPlanRequest,
+  type AIFloorPlanResponse,
+  type FloorPlanPreviewImageRequest,
+  type FloorPlanPreviewImageResponse,
+  type AIPlannerResponseDto,
+  type PlanCritiqueResponse,
+  type FeasibilityResponse,
 } from "@/services/plannerService";
 import { HttpError } from "@/services/httpClient";
 import { usePlannerStore } from "@/state/plannerStore";
 import type { GeometryModel } from "@/geometry/geojsonParser";
 import { mapPlanGeometryToModel } from "@/geometry/planGeometryMapper";
+
+export function useFeasibility(plotId: string | null) {
+  return useQuery<FeasibilityResponse | null>({
+    queryKey: plotId
+      ? queryKeys.planner.feasibility(plotId)
+      : ["planner", "feasibility", "none"],
+    queryFn: () => (plotId ? getFeasibility(plotId) : Promise.resolve(null)),
+    enabled: Boolean(plotId),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes — feasibility rarely changes
+  });
+}
+
+export function usePlotExploration(plotId: string | null) {
+  return useQuery<ExplorationResponse | null>({
+    queryKey: plotId
+      ? queryKeys.planner.exploration(plotId)
+      : ["planner", "exploration", "none"],
+    queryFn: () => (plotId ? getPlotExploration(plotId) : Promise.resolve(null)),
+    enabled: Boolean(plotId),
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 export function useSiteMetrics(plotId: string | null) {
   return useQuery<SiteMetrics | null>({
@@ -80,6 +119,30 @@ export function usePlanGeometry(jobId: string | null) {
   });
 }
 
+export function useAIScenarios(plotId: string | null, brief: string | null) {
+  const setSelectedPlotId = usePlannerStore((s) => s.setSelectedPlotId);
+  const inputs = usePlannerStore((s) => s.inputs);
+
+  return useQuery<AIPlannerResponseDto | null>({
+    queryKey: plotId
+      ? queryKeys.planner.aiScenarios(plotId)
+      : ["planner", "ai-scenarios", "none"],
+    queryFn: async () => {
+      if (!plotId || !brief) return null;
+      // Ensure store stays in sync with the requested plot.
+      setSelectedPlotId(plotId);
+      return generateAIScenarios({ brief, site_id: plotId, inputs });
+    },
+    enabled: Boolean(plotId && brief),
+  });
+}
+
+export function usePlanCritique() {
+  return useMutation<PlanCritiqueResponse, Error, { jobId: string; userNote?: string }>({
+    mutationFn: ({ jobId, userNote }) => getPlanCritique(jobId, userNote),
+  });
+}
+
 export function useFloorPlan() {
   return useMutation<FloorPlanResponse, Error, FloorPlanRequest>({
     mutationFn: (payload: FloorPlanRequest) => generateFloorPlan(payload),
@@ -89,6 +152,28 @@ export function useFloorPlan() {
 export function useUnitLayout() {
   return useMutation<UnitInteriorResponse, Error, UnitInteriorRequest>({
     mutationFn: (payload: UnitInteriorRequest) => generateUnitInterior(payload),
+  });
+}
+
+export function useFloorCore() {
+  return useMutation<FloorCoreResponse, Error, FloorCoreRequest>({
+    mutationFn: (payload) => generateFloorCore(payload),
+  });
+}
+
+export function useAIFloorPlan() {
+  return useMutation<AIFloorPlanResponse, Error, AIFloorPlanRequest>({
+    mutationFn: (payload) => generateAIFloorPlan(payload),
+  });
+}
+
+export function useFloorPlanPreviewImage() {
+  return useMutation<
+    FloorPlanPreviewImageResponse,
+    Error,
+    FloorPlanPreviewImageRequest
+  >({
+    mutationFn: (payload) => generateFloorPlanPreviewImage(payload),
   });
 }
 
@@ -125,6 +210,8 @@ export function useGeneratePlan() {
         planResultSummary: { status: "pending" },
         createdAt: new Date().toISOString(),
       });
+      // Set the new job as the active scenario so usePlanJobStatus tracks it.
+      usePlannerStore.getState().setActiveScenarioId(jobId);
     },
   });
 }

@@ -4,7 +4,11 @@ import { usePlotsQuery } from "@/modules/plots/hooks/usePlotsQuery";
 import { usePlannerStore } from "@/state/plannerStore";
 
 export function PlotSelector() {
-  const { data, isLoading, isError } = usePlotsQuery();
+  const locationPreference = usePlannerStore((s) => s.locationPreference);
+  const { data, isLoading, isError } = usePlotsQuery({
+    tpScheme: locationPreference.tpId,
+    city: locationPreference.districtName,
+  });
   const selectedPlotId = usePlannerStore((state) => state.selectedPlotId);
   const setSelectedPlotId = usePlannerStore(
     (state) => state.setSelectedPlotId,

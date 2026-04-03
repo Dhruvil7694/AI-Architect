@@ -12,6 +12,7 @@ authoritative source and fallback behaviour.
 """
 
 from rules_engine.rules.loader import get_gdcr_config
+from architecture.regulatory.fsi_policy import resolve_fsi_policy
 
 
 def get_cop_required_fraction() -> float:
@@ -133,7 +134,14 @@ def get_max_fsi() -> float:
         return 4.0
 
 
-def get_dynamic_max_fsi(plot_area_sqft: float, road_width_m: float) -> float:
+def get_dynamic_max_fsi(
+    plot_area_sqft: float,
+    road_width_m: float,
+    distance_to_wide_road_m: float | None = None,
+    plot=None,
+    authority: str | None = None,
+    zone: str | None = None,
+) -> float:
     """
     Compute a dynamic max FSI cap based on premium tiers and corridor rules.
 
@@ -144,32 +152,17 @@ def get_dynamic_max_fsi(plot_area_sqft: float, road_width_m: float) -> float:
       - Otherwise, return the first tier's resulting_cap when present, or
         fall back to the global max_fsi.
     """
-    gdcr = get_gdcr_config()
-    fsi_cfg = gdcr.get("fsi_rules", {}) or {}
-    tiers = fsi_cfg.get("premium_tiers") or []
-    corridor_rule = fsi_cfg.get("corridor_rule") or {}
-    eligible_if = corridor_rule.get("eligible_if") or {}
-
-    road_width_min = float(eligible_if.get("road_width_min_m", 36.0))
-
-    corridor_eligible = road_width_m >= road_width_min
-
-    if tiers:
-        try:
-            highest_cap = max(float(t.get("resulting_cap", 0.0)) for t in tiers)
-        except Exception:
-            highest_cap = 0.0
-
-        try:
-            first_cap = float(tiers[0].get("resulting_cap", 0.0))
-        except Exception:
-            first_cap = highest_cap
-
-        if corridor_eligible:
-            return highest_cap
-        return first_cap
-
-    return get_max_fsi()
+    try:
+        d = resolve_fsi_policy(
+            plot=plot,
+            road_width_m=float(road_width_m),
+            authority_override=authority,
+            zone_override=zone,
+            distance_to_wide_road_m=distance_to_wide_road_m,
+        )
+        return float(d.max_fsi)
+    except Exception:
+        return get_max_fsi()
 
 
 def get_max_ground_coverage_pct() -> float:

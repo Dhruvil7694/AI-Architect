@@ -1,25 +1,20 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { PlotDropdown } from "@/modules/planner/components/PlotDropdown";
 import { SiteMetricsSummary } from "@/modules/planner/components/SiteMetricsSummary";
 import { DevelopmentInputs } from "@/modules/planner/components/DevelopmentInputs";
-import { PlannerCanvas } from "@/modules/planner/components/PlannerCanvas";
-import { FloorPlanningView } from "@/modules/planner/components/FloorPlanningView";
-import { UnitInteriorView } from "@/modules/planner/components/UnitInteriorView";
-import { Legend } from "@/modules/planner/components/Legend";
-import { LayerControl } from "@/modules/planner/components/LayerControl";
-import { PlanningMetricsPanel } from "@/modules/planner/components/PlanningMetricsPanel";
-import { UnitInspectionPanel } from "@/modules/planner/components/UnitInspectionPanel";
-import { StepNavigation } from "@/modules/planner/components/StepNavigation";
+import { DirectFloorPlanView } from "@/modules/planner/components/DirectFloorPlanView";
+import { PlotExplorationView } from "@/modules/planner/components/PlotExplorationView";
 import {
   PlanGenerationControls,
   PlanGenerationStatus,
 } from "@/modules/planner/components/PlanGenerationControls";
-import { ScenarioBar } from "@/modules/planner/components/ScenarioBar";
+import { WholeTpMap } from "@/modules/plots/components/WholeTpMap";
+import { usePlotsQuery } from "@/modules/plots/hooks/usePlotsQuery";
 import { usePlannerStore } from "@/state/plannerStore";
-import { usePlanGeometry, usePlanJobStatus } from "@/modules/planner/hooks/usePlannerData";
+import { useAIFloorPlan, useFeasibility } from "@/modules/planner/hooks/usePlannerData";
 
 function PlannerContent() {
   const searchParams = useSearchParams();
@@ -27,52 +22,100 @@ function PlannerContent() {
   const isInputsPanelOpen = usePlannerStore((s) => s.isInputsPanelOpen);
   const toggleInputsPanel = usePlannerStore((s) => s.toggleInputsPanel);
   const selectedPlotId = usePlannerStore((s) => s.selectedPlotId);
-  const activeScenarioId = usePlannerStore((s) => s.activeScenarioId);
   const planningStep = usePlannerStore((s) => s.planningStep);
-  const debugMode = usePlannerStore((s) => s.debugMode);
-  const toggleDebugMode = usePlannerStore((s) => s.toggleDebugMode);
-  const { data: geometryModel = null } = usePlanGeometry(activeScenarioId);
-  const { data: jobStatus } = usePlanJobStatus(activeScenarioId);
+  const setPlanningStep = usePlannerStore((s) => s.setPlanningStep);
+  const inputs = usePlannerStore((s) => s.inputs);
+  const locationPreference = usePlannerStore((s) => s.locationPreference);
+  const imageModel = usePlannerStore((s) => s.imageModel);
+  const setImageModel = usePlannerStore((s) => s.setImageModel);
 
-  // Show loading whenever we have an active job but no geometry yet.
-  // Deliberately keep the loader visible even when status becomes "completed":
-  // the geometry query polls every 1.5 s and will populate geometryModel as soon as
-  // result_json is readable.  Only stop loading on an explicit "failed" status so the
-  // canvas never flashes "No geometry loaded" mid-computation.
-  const isPlanLoading =
-    !!activeScenarioId &&
-    geometryModel === null &&
-    jobStatus?.status !== "failed";
-  const loadingProgress =
-    typeof jobStatus?.progress === "number" ? jobStatus.progress : null;
+  const { data: plots = [], isLoading: plotsLoading } = usePlotsQuery({
+    tpScheme: locationPreference.tpId,
+    city: locationPreference.districtName,
+  });
+  const { data: feasibility } = useFeasibility(selectedPlotId);
+
+  // AI floor plan mutation — called directly from Generate button
+  const aiFloorPlan = useAIFloorPlan();
+
+  // Resolve the selected plot object
+  const selectedPlot = useMemo(
+    () => plots.find((p) => p.id === selectedPlotId) ?? null,
+    [plots, selectedPlotId],
+  );
+
+  // ── Generate handler: skip site plan, call AI floor plan directly ──────────
+  const handleGenerate = useCallback(() => {
+    if (!selectedPlot?.geometry || !selectedPlotId) return;
+
+    const geo = selectedPlot.geometry as { type: string; coordinates: number[][][] };
+    if (geo.type !== "Polygon") return;
+
+    const nFloors = inputs.floors ?? feasibility?.maxFloors ?? 10;
+    const storeyHeight = inputs.storeyHeightM ?? 3.0;
+
+    aiFloorPlan.mutate({
+      footprint: geo as { type: "Polygon"; coordinates: number[][][] },
+      n_floors: nFloors,
+      building_height_m: nFloors * storeyHeight,
+      units_per_core: inputs.unitsPerCore ?? 4,
+      building_type: inputs.buildingType,
+      segment: inputs.segment ?? "mid",
+      unit_mix: inputs.unitMix ?? ["2BHK", "3BHK"],
+      storey_height_m: storeyHeight,
+      plot_area_sqm: feasibility?.plotAreaSqm ?? selectedPlot.areaSqm ?? 0,
+      image_model: imageModel,
+    });
+
+    // Switch directly to floor step
+    setPlanningStep("floor");
+  }, [selectedPlot, selectedPlotId, inputs, feasibility, aiFloorPlan, setPlanningStep, imageModel]);
+
+  // Retry uses the same handler
+  const handleRetry = handleGenerate;
 
   useEffect(() => {
     const plotId = searchParams.get("plotId");
     if (plotId) setSelectedPlotId(plotId);
   }, [searchParams, setSelectedPlotId]);
 
+  const showFloorPlan = planningStep === "floor";
+
   return (
     <div className="-mx-6 -mb-6 -mt-6 flex min-h-[calc(100vh-7rem)] flex-col">
-      {/* Top bar: plot + step nav + metrics + actions */}
+      {/* Top bar */}
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-neutral-200 bg-white px-4 py-2">
         <PlotDropdown />
-        <StepNavigation />
         <SiteMetricsSummary />
         <div className="hidden sm:block h-4 w-px bg-neutral-200" aria-hidden />
         <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-          <Legend />
-          <PlanGenerationStatus />
-          <PlanGenerationControls />
-          <button
-            type="button"
-            onClick={toggleDebugMode}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              debugMode ? "bg-amber-200 text-amber-900" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-            }`}
-            title="Toggle debug layers"
-          >
-            Debug
-          </button>
+          <PlanGenerationStatus
+            isGenerating={aiFloorPlan.isPending}
+            isComplete={!!aiFloorPlan.data && !aiFloorPlan.isPending}
+          />
+          {/* Image model selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="hidden sm:inline text-[10px] font-medium text-neutral-400 uppercase tracking-wide">Image</span>
+            <select
+              value={imageModel}
+              onChange={(e) => setImageModel(e.target.value)}
+              disabled={aiFloorPlan.isPending}
+              className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs font-medium text-neutral-700 focus:outline-none focus:ring-1 focus:ring-neutral-400 disabled:opacity-50"
+              title="Image generation model"
+            >
+              <option value="dalle3">DALL-E 3</option>
+              <option value="gemini">Nano Banana (Gemini)</option>
+              <option value="recraft">Recraft</option>
+              <option value="ideogram">Ideogram V2</option>
+              <option value="flux">FLUX (fal.ai)</option>
+              <option value="svg_only">SVG only</option>
+            </select>
+          </div>
+          <PlanGenerationControls
+            onGenerate={handleGenerate}
+            isGenerating={aiFloorPlan.isPending}
+            isError={aiFloorPlan.isError}
+          />
           <button
             type="button"
             onClick={toggleInputsPanel}
@@ -87,34 +130,44 @@ function PlannerContent() {
         </div>
       </header>
 
-      {/* Main: sidebar (layers + metrics) + canvas */}
-      <section className="relative flex min-h-0 flex-1 gap-3 overflow-hidden p-3">
-        <aside className="flex w-56 shrink-0 flex-col gap-3 overflow-auto">
-          <LayerControl />
-          <PlanningMetricsPanel />
-          {planningStep === "floor" && <UnitInspectionPanel />}
-        </aside>
-        <div className="min-h-0 flex-1">
-          {planningStep === "site" ? (
-            <PlannerCanvas
-              geometryModel={geometryModel}
-              isLoading={isPlanLoading}
-              loadingProgress={loadingProgress}
+      {/* Main content */}
+      {!selectedPlotId ? (
+        <section className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto p-6">
+          <div className="w-full max-w-5xl">
+            <h2 className="mb-4 text-center text-lg font-semibold text-neutral-700">
+              Select a plot from the map or use the dropdown above
+            </h2>
+            {plotsLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <span className="h-6 w-6 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+                <span className="ml-3 text-sm text-neutral-500">Loading map...</span>
+              </div>
+            ) : (
+              <WholeTpMap plots={plots} width={1200} height={800} />
+            )}
+          </div>
+        </section>
+      ) : showFloorPlan ? (
+        <section className="relative flex min-h-0 flex-1 overflow-hidden p-3">
+          <div className="min-h-0 flex-1">
+            <DirectFloorPlanView
+              data={aiFloorPlan.data ?? null}
+              isPending={aiFloorPlan.isPending}
+              isError={aiFloorPlan.isError}
+              error={aiFloorPlan.error}
+              onRetry={handleRetry}
             />
-          ) : planningStep === "floor" ? (
-            <FloorPlanningView geometryModel={geometryModel} />
-          ) : (
-            <UnitInteriorView />
-          )}
-        </div>
-      </section>
+          </div>
+        </section>
+      ) : (
+        <section className="relative flex min-h-0 flex-1 gap-3 overflow-hidden p-3">
+          <div className="min-h-0 flex-1">
+            <PlotExplorationView />
+          </div>
+        </section>
+      )}
 
-      {/* Slim scenario bar */}
-      <footer className="shrink-0 border-t border-neutral-200 bg-white px-4 py-2">
-        <ScenarioBar />
-      </footer>
-
-      {/* Inputs as overlay drawer (slides in from right) */}
+      {/* Inputs drawer */}
       {isInputsPanelOpen && (
         <>
           <div

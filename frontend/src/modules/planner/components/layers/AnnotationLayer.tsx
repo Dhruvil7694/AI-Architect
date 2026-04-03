@@ -259,9 +259,14 @@ export function AnnotationLayer({
         if (!pos) return null;
         const pxArea = screenArea(f, vt);
         const copReqSqm = Number(metrics.copRequiredSqm) || 0;
+        const widthM = f.properties?.width_m as number | undefined;
+        const depthM = f.properties?.depth_m as number | undefined;
+        const featureAreaSqm = f.properties?.area_sqm as number | undefined;
+        const displayArea = featureAreaSqm ?? (copAreaSqm > 0 ? copAreaSqm : null);
         const lines = [
           "COP",
-          copAreaSqm > 0 ? `${Math.round(copAreaSqm)} m²` : "",
+          widthM && depthM ? `${widthM.toFixed(0)} m × ${depthM.toFixed(0)} m` : "",
+          displayArea ? `Provided: ${Math.round(displayArea)} m²` : "",
           copReqSqm > 0 ? `Required: ${Math.round(copReqSqm)} m²` : "",
         ].filter(Boolean);
         return (

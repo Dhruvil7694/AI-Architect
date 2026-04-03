@@ -24,6 +24,18 @@ def _load_dotenv_if_available() -> None:
 
 _load_dotenv_if_available()
 
+_DEFAULT_RECRAFT_NEGATIVE = (
+    "3D, perspective, furniture, photorealistic, gradient fills"
+)
+
+
+def _recraft_negative_from_env() -> Optional[str]:
+    """Unset → default negative; empty string → disable."""
+    if "RECRAFT_NEGATIVE_PROMPT" not in os.environ:
+        return _DEFAULT_RECRAFT_NEGATIVE
+    s = os.environ.get("RECRAFT_NEGATIVE_PROMPT", "").strip()
+    return s if s else None
+
 
 @dataclass
 class AIConfig:
@@ -67,10 +79,26 @@ class AIConfig:
 
     # DALL-E 3 floor plan image generation
     floor_plan_image_enabled: bool = True
+    floor_plan_image_variants: int = 4
     dalle_model: str = "dall-e-3"
     dalle_size: str = "1792x1024"
     dalle_quality: str = "hd"
-    dalle_timeout_s: float = 30.0
+    dalle_timeout_s: float = 120.0
+
+    # Third-party image model API keys (optional; feature-gated)
+    recraft_api_key: Optional[str] = None
+    recraft_model: str = "recraftv4"
+    recraft_size: str = "1:1"  # square aspect ratio — better for floor plates than 16:9
+    recraft_style: Optional[str] = None
+    recraft_negative_prompt: Optional[str] = (
+        "3D, perspective, furniture, photorealistic, gradient fills"
+    )
+    recraft_timeout_s: float = 120.0
+    ideogram_api_key: Optional[str] = None
+    fal_key: Optional[str] = None       # fal.ai (FLUX)
+    gemini_api_key: Optional[str] = None  # Google Gemini (incl. Nano Banana image models)
+    gemini_image_model: str = "imagen-4.0-generate-001"
+    gemini_image_timeout_s: float = 120.0
 
     # Token limits
     advisor_input_max_tokens: int = 500
@@ -150,10 +178,22 @@ def get_ai_config() -> AIConfig:
         hf_image_model=os.environ.get("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell"),
         hf_image_timeout_s=_float_env("HF_IMAGE_TIMEOUT_S", 120.0),
         floor_plan_image_enabled=_bool_env("FLOOR_PLAN_IMAGE_ENABLED", True),
+        floor_plan_image_variants=_int_env("FLOOR_PLAN_IMAGE_VARIANTS", 4),
         dalle_model=os.environ.get("DALLE_MODEL", "dall-e-3"),
         dalle_size=os.environ.get("DALLE_SIZE", "1792x1024"),
         dalle_quality=os.environ.get("DALLE_QUALITY", "hd"),
-        dalle_timeout_s=_float_env("DALLE_TIMEOUT_S", 30.0),
+        dalle_timeout_s=_float_env("DALLE_TIMEOUT_S", 120.0),
+        recraft_api_key=(os.environ.get("RECRAFT_API_KEY") or "").strip() or None,
+        recraft_model=os.environ.get("RECRAFT_MODEL", "recraftv4").strip() or "recraftv4",
+        recraft_size=os.environ.get("RECRAFT_SIZE", "16:9").strip() or "16:9",
+        recraft_style=(os.environ.get("RECRAFT_STYLE") or "").strip() or None,
+        recraft_negative_prompt=_recraft_negative_from_env(),
+        recraft_timeout_s=_float_env("RECRAFT_TIMEOUT_S", 120.0),
+        ideogram_api_key=os.environ.get("IDEOGRAM_API_KEY") or None,
+        fal_key=os.environ.get("FAL_KEY") or None,
+        gemini_api_key=os.environ.get("GEMINI_API_KEY") or None,
+        gemini_image_model=os.environ.get("GEMINI_IMAGE_MODEL", "imagen-4.0-generate-001"),
+        gemini_image_timeout_s=_float_env("GEMINI_IMAGE_TIMEOUT_S", 120.0),
     )
 
 

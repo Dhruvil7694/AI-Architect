@@ -42,8 +42,68 @@ from placement_engine.geometry import (
 )
 from placement_engine.geometry.orientation_finder import find_orientation
 
+# Orientation sweep step — module-level so find_best_inscribed_rect and
+# find_top_n_inscribed_rects use the identical sweep without duplicating the constant.
+_SWEEP_STEP_DEG: int = 15   # 7 angles: 0°, 15°, 30°, 45°, 60°, 75°, 90°
+
 
 # ── Public API ─────────────────────────────────────────────────────────────────
+
+def find_top_n_inscribed_rects(
+    polygon:       Polygon,
+    min_width_dxf: float,
+    min_depth_dxf: float,
+    n:             int = 10,
+    force_angle:   Optional[float] = None,
+) -> list[FootprintCandidate]:
+    """
+    Return up to *n* rectangle candidates sorted by area descending.
+
+    This is the multi-candidate companion to find_best_inscribed_rect.  The
+    same 7-angle orientation sweep (0°–90° in 15° steps anchored at the MBR
+    primary angle) is applied; all valid candidates are collected, sorted by
+    area, and the top-N returned.
+
+    The scorer (placement_engine.scoring.placement_scorer) consumes this list
+    to select the architecturally best candidate instead of the purely largest.
+
+    Parameters
+    ----------
+    polygon       : Shapely Polygon (single, valid).
+    min_width_dxf : Minimum acceptable width (DXF feet).
+    min_depth_dxf : Minimum acceptable depth (DXF feet).
+    n             : Maximum candidates to return (default 10).
+    force_angle   : If given, only test this angle (COL_WISE / DIAG_WISE mode).
+
+    Returns
+    -------
+    List of FootprintCandidate sorted by area descending.  May be empty.
+    """
+    if not polygon.is_valid or polygon.is_empty or polygon.area < MIN_FOOTPRINT_AREA_SQFT:
+        return []
+
+    if force_angle is not None:
+        c = find_inscribed_rect(polygon, force_angle, "FORCED", min_width_dxf, min_depth_dxf)
+        return [c] if c is not None else []
+
+    orient = find_orientation(polygon)
+    candidates: list[FootprintCandidate] = []
+
+    for offset in range(0, 91, _SWEEP_STEP_DEG):
+        angle = orient.angle_primary_deg + offset
+        if offset == 0:
+            label = "PRIMARY"
+        elif offset == 90:
+            label = "PERPENDICULAR"
+        else:
+            label = f"ROTATED_{offset}"
+        c = find_inscribed_rect(polygon, angle, label, min_width_dxf, min_depth_dxf)
+        if c is not None:
+            candidates.append(c)
+
+    candidates.sort(key=lambda c: -c.area_sqft)
+    return candidates[:n]
+
 
 def find_inscribed_rect(
     polygon:       Polygon,
@@ -159,39 +219,48 @@ def find_best_inscribed_rect(
     force_angle:   Optional[float] = None,
 ) -> Optional[FootprintCandidate]:
     """
-    Test both orientation candidates (θ and θ+90°) and return the better one.
+    Find the maximum inscribed rectangle by sweeping orientations and returning
+    the globally best result.
 
     Selection rules (in order):
       1. Larger footprint area wins.
       2. Tie: aspect ratio closer to 2:1 wins.
       3. Tie: smaller angle_deg wins (deterministic absolute tie-break).
 
+    Orientation strategy
+    --------------------
+    Delegates to find_top_n_inscribed_rects (same 7-angle sweep, 0°–90° in
+    15° steps) and applies the three-rule _select_winner reduction to choose
+    the single best candidate.
+
+    When force_angle is given (COL_WISE / DIAG_WISE packing), only that angle
+    is tested.
+
     Parameters
     ----------
     polygon       : Shapely Polygon
     min_width_dxf : Minimum acceptable width (DXF feet)
     min_depth_dxf : Minimum acceptable depth (DXF feet)
-    force_angle   : If given, only test this angle (used by COL_WISE packing).
+    force_angle   : If given, only test this angle.
 
     Returns
     -------
     Best FootprintCandidate, or None.
     """
-    orient = find_orientation(polygon)
-
-    if force_angle is not None:
-        label = "FORCED"
-        c = find_inscribed_rect(polygon, force_angle, label, min_width_dxf, min_depth_dxf)
-        return c
-
-    c_primary = find_inscribed_rect(
-        polygon, orient.angle_primary_deg, "PRIMARY", min_width_dxf, min_depth_dxf
-    )
-    c_secondary = find_inscribed_rect(
-        polygon, orient.angle_secondary_deg, "PERPENDICULAR", min_width_dxf, min_depth_dxf
+    # Collect all candidates from the sweep (or single forced angle)
+    candidates = find_top_n_inscribed_rects(
+        polygon=polygon,
+        min_width_dxf=min_width_dxf,
+        min_depth_dxf=min_depth_dxf,
+        n=100,            # effectively unbounded — we want all angles
+        force_angle=force_angle,
     )
 
-    return _select_winner(c_primary, c_secondary)
+    # Apply the original three-rule tie-breaking reduction
+    best: Optional[FootprintCandidate] = None
+    for candidate in candidates:
+        best = _select_winner(best, candidate)
+    return best
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -217,28 +286,43 @@ def _rasterize(
     """
     Build a boolean occupancy grid.  grid[row][col] = 1 if the cell centre
     is inside *polygon*, else 0.  Row 0 is the BOTTOM of the bounding box.
-    """
-    grid = np.zeros((rows, cols), dtype=np.int32)
 
-    # Vectorised containment check using numpy
-    # Build centroid coordinate arrays
+    Uses a fully vectorised approach: build a flat (rows*cols) array of cell
+    centres, call shapely's batch contains once, then reshape.  This is
+    20-50x faster than the previous Python double-loop, making multi-angle
+    rotation sweeps practical.
+    """
     col_indices = np.arange(cols)
     row_indices = np.arange(rows)
     cx = minx + (col_indices + 0.5) * resolution   # shape (cols,)
     cy = miny + (row_indices + 0.5) * resolution   # shape (rows,)
 
-    # Sample using Shapely's prepared geometry for speed
-    from shapely.prepared import prep
-    prepared = prep(polygon)
+    # Build flat coordinate arrays for all cell centres: shape (rows*cols,)
+    gx, gy = np.meshgrid(cx, cy)          # both shape (rows, cols)
+    flat_x = gx.ravel()
+    flat_y = gy.ravel()
 
-    from shapely.geometry import Point
+    # Try shapely 2.x vectorised API first (fastest); fall back to 1.x.
+    try:
+        import shapely
+        mask = shapely.contains_xy(polygon, flat_x, flat_y)
+    except AttributeError:
+        # shapely < 2.0: use vectorized module
+        try:
+            from shapely.vectorized import contains as _vec_contains
+            mask = _vec_contains(polygon, flat_x, flat_y)
+        except Exception:
+            # Final fallback: prepared-geometry row-by-row loop
+            from shapely.prepared import prep
+            from shapely.geometry import Point
+            prepared = prep(polygon)
+            mask = np.array(
+                [prepared.contains(Point(float(x), float(y)))
+                 for x, y in zip(flat_x, flat_y)],
+                dtype=bool,
+            )
 
-    for r in range(rows):
-        y = cy[r]
-        for c in range(cols):
-            if prepared.contains(Point(cx[c], y)):
-                grid[r][c] = 1
-
+    grid = mask.reshape(rows, cols).astype(np.int32)
     return grid
 
 
@@ -253,6 +337,11 @@ def _max_rect_in_grid(
     all-1 rectangle, or None if no cell is set.
 
     Time complexity: O(rows × cols).
+
+    Optimisations vs. the naïve implementation:
+    - Histogram height update is vectorised with np.where (no Python column loop).
+    - The histogram is converted to a Python list before the stack pass since
+      Python list indexing in a tight loop is faster than numpy scalar access.
     """
     rows, cols = grid.shape
     if rows == 0 or cols == 0:
@@ -264,15 +353,14 @@ def _max_rect_in_grid(
     best: Optional[tuple[int, int, int, int]] = None
 
     for r in range(rows):
-        # Update histogram heights
-        for c in range(cols):
-            if grid[r][c] == 1:
-                heights[c] += 1
-            else:
-                heights[c] = 0
+        # Vectorised height update: increment where occupied, reset elsewhere.
+        heights = np.where(grid[r] == 1, heights + 1, 0)
 
-        # Largest rectangle in histogram for this row
-        result = _largest_rect_in_histogram(heights, r)
+        # Convert to Python list — faster for the tight stack loop below.
+        h_list: list[int] = heights.tolist()
+
+        # Largest rectangle in histogram for this row (stack-based O(n)).
+        result = _largest_rect_in_histogram(h_list, r)
         if result is not None:
             area_cells = result[2] * result[3]
             if area_cells > best_area:
@@ -283,11 +371,13 @@ def _max_rect_in_grid(
 
 
 def _largest_rect_in_histogram(
-    heights: np.ndarray,
+    heights: list[int],
     current_row: int,
 ) -> Optional[tuple[int, int, int, int]]:
     """
     Classic stack-based O(n) algorithm.
+
+    Accepts a plain Python list for heights (faster index access in tight loop).
 
     Returns (bottom_row, left_col, width_cells, height_cells) for the
     largest rectangle ending at *current_row*, or None.

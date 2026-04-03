@@ -51,10 +51,10 @@ from typing import List, Optional, Tuple
 import numpy as np
 from shapely.geometry import MultiPolygon, Polygon, box
 
-from envelope_engine.geometry.edge_classifier import REAR, EdgeSpec
+from envelope_engine.geometry.edge_classifier import REAR, ROAD, SIDE, EdgeSpec
 from architecture.regulatory_accessors import get_cop_required_fraction
 from rules_engine.rules.loader import get_gdcr_config
-from common.units import sqft_to_sqm, sqm_to_sqft, metres_to_dxf
+from common.units import dxf_plane_area_to_sqm, metres_to_dxf
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +138,7 @@ def carve_common_plot(
         applies_threshold_sqm = 0.0
         min_total_area_sqm = 0.0
 
-    plot_area_sqft = plot_polygon.area
-    plot_area_sqm = sqft_to_sqm(plot_area_sqft)
+    plot_area_sqm = dxf_plane_area_to_sqm(plot_polygon.area)
 
     if applies_threshold_sqm > 0.0 and plot_area_sqm < applies_threshold_sqm:
         logger.info(
@@ -149,13 +148,19 @@ def carve_common_plot(
         )
         return None, 0.0, "NO_CARVE_NEEDED"
 
-    # Required COP area in sq.ft: max(fraction × plot_area, minimum_total_area_sqm).
-    min_total_area_sqft = (
-        sqm_to_sqft(min_total_area_sqm) if min_total_area_sqm > 0.0 else 0.0
+    # Required COP area in DXF plane units² (m² when using metre DXF).
+    required_area = max(
+        COMMON_PLOT_FRACTION * plot_area_sqm,
+        min_total_area_sqm,
     )
-    required_area = max(COMMON_PLOT_FRACTION * plot_area_sqft, min_total_area_sqft)
 
     strategy = (cop_strategy or "edge").lower()
+
+    # ── INTELLIGENT strategy: adaptive COP placement ─────────────────────────
+    if strategy == "intelligent":
+        return _carve_intelligent_cop(
+            plot_polygon, envelope, edge_specs, required_area, cop_cfg,
+        )
 
     # ── CENTER strategy: axis-aligned rectangle around plot centroid ───────────
     if strategy == "center":
@@ -255,25 +260,36 @@ def carve_common_plot(
 
     rear_spec = rear_specs[0]   # use the first REAR edge (typically only one)
 
+    # GDCR minimum perpendicular depth of the COP strip (7.5 m per GDCR.yaml).
+    # The depth is measured perpendicular to the rear edge — it IS the minimum
+    # dimension of the strip.  We enforce it so the COP is always usable open
+    # space (not just a thin ribbon that satisfies area but fails dimension).
+    try:
+        gdcr_min_dim_m = float(
+            (get_gdcr_config().get("common_open_plot", {}) or {}).get("minimum_dimension_m", 7.5)
+        )
+    except Exception:
+        gdcr_min_dim_m = 7.5
+    min_depth_dxf = metres_to_dxf(gdcr_min_dim_m)
+
     # ── Check if rear margin already covers the required area ──────────────────
-    # The rear margin zone is the strip from the rear edge to depth = margin_dxf
+    # The rear margin zone is the strip from the rear edge to depth = margin_dxf.
+    # We only use it as COP when its depth also meets the minimum dimension.
     rear_margin_dxf = rear_spec.required_margin_dxf
-    if rear_margin_dxf > 0:
+    if rear_margin_dxf > 0 and rear_margin_dxf >= min_depth_dxf:
         margin_strip = _rear_strip_polygon(plot_polygon, rear_spec, rear_margin_dxf)
         margin_area = margin_strip.area
         if margin_area >= required_area:
             logger.info(
-                "Rear margin zone %.1f sq.ft >= required common plot %.1f sq.ft. "
-                "NO_CARVE_NEEDED.",
-                margin_area,
-                required_area,
+                "Rear margin zone %.1f sq.ft >= required common plot %.1f sq.ft "
+                "(depth %.2f dxf >= min %.2f dxf). NO_CARVE_NEEDED.",
+                margin_area, required_area, rear_margin_dxf, min_depth_dxf,
             )
-            # Return the margin strip itself as the common plot polygon
             common_geom = margin_strip if not margin_strip.is_empty else None
             return common_geom, round(margin_area, 2), "NO_CARVE_NEEDED"
 
     # ── Bisect to find the carving depth ──────────────────────────────────────
-    # Maximum depth: half the plot's extent along the rear normal direction
+    # Maximum depth: half the plot's extent along the rear normal direction.
     nx, ny = rear_spec.inward_normal
     xs = [c[0] for c in plot_polygon.exterior.coords]
     ys = [c[1] for c in plot_polygon.exterior.coords]
@@ -297,6 +313,18 @@ def carve_common_plot(
         if (hi - lo) < _BISECT_TOLERANCE:
             break
 
+    # Enforce minimum dimension: if the bisected depth < min_depth_dxf, re-carve
+    # at min_depth_dxf.  This guarantees the strip is at least 7.5 m deep and
+    # satisfies GDCR usability (even if area ends up slightly above 10%).
+    if hi < min_depth_dxf:
+        deeper_strip = _rear_strip_polygon(plot_polygon, rear_spec, min_depth_dxf)
+        if not deeper_strip.is_empty:
+            best_strip = deeper_strip
+            logger.info(
+                "COP depth %.2f dxf < min %.2f dxf; re-carved at minimum dimension.",
+                hi, min_depth_dxf,
+            )
+
     if best_strip is None or best_strip.is_empty:
         logger.warning("Common plot bisection failed — returning None.")
         return None, 0.0, "NO_REAR_EDGE"
@@ -313,3 +341,212 @@ def carve_common_plot(
         plot_polygon.area,
     )
     return best_strip, round(common_area, 2), "CARVED"
+
+
+# ── Intelligent COP strategy ─────────────────────────────────────────────────
+
+
+def _polsby_popper(polygon: Polygon) -> float:
+    """Compactness score: 1.0 = circle, 0.0 = degenerate."""
+    if polygon.is_empty or polygon.length == 0:
+        return 0.0
+    return (4.0 * math.pi * polygon.area) / (polygon.length ** 2)
+
+
+def _cop_candidate_score(
+    candidate: Polygon,
+    plot_polygon: Polygon,
+    envelope: Polygon,
+) -> float:
+    """
+    Score a COP candidate location by:
+      - centrality   (0.35): proximity of COP centroid to plot centroid
+      - compactness  (0.35): Polsby-Popper shape quality
+      - accessibility (0.30): fraction of COP boundary touching plot boundary
+    """
+    diag = math.sqrt(
+        (plot_polygon.bounds[2] - plot_polygon.bounds[0]) ** 2 +
+        (plot_polygon.bounds[3] - plot_polygon.bounds[1]) ** 2
+    )
+    if diag == 0:
+        return 0.0
+
+    # Centrality: 1.0 if COP centroid is at plot centroid
+    cop_cx, cop_cy = candidate.centroid.x, candidate.centroid.y
+    plot_cx, plot_cy = plot_polygon.centroid.x, plot_polygon.centroid.y
+    dist = math.sqrt((cop_cx - plot_cx) ** 2 + (cop_cy - plot_cy) ** 2)
+    centrality = 1.0 - min(dist / diag, 1.0)
+
+    # Compactness: Polsby-Popper
+    compactness = _polsby_popper(candidate)
+
+    # Accessibility: fraction of COP perimeter touching plot boundary
+    try:
+        shared_boundary = candidate.intersection(plot_polygon.boundary)
+        accessibility = shared_boundary.length / candidate.length if candidate.length > 0 else 0.0
+    except Exception:
+        accessibility = 0.0
+
+    return 0.35 * centrality + 0.35 * compactness + 0.30 * accessibility
+
+
+def _carve_intelligent_cop(
+    plot_polygon: Polygon,
+    envelope: Polygon,
+    edge_specs: list,
+    required_area: float,
+    cop_cfg: dict,
+) -> tuple:
+    """
+    Intelligent COP placement: evaluates multiple candidate positions
+    and selects the best one based on centrality, compactness, and
+    accessibility.
+
+    Candidate strategies:
+    1. Rear strip (proven, always generated)
+    2. Central courtyard box (for multi-tower layouts)
+    3. Side-strip candidates (for irregular plots)
+
+    Returns
+    -------
+    (common_geom, common_area_sqft, status)
+    """
+    geometry_cfg = cop_cfg.get("geometry_constraints", {}) or {}
+    min_width_m = float(geometry_cfg.get("minimum_width_m", 10.0) or 10.0)
+    min_depth_m = float(geometry_cfg.get("minimum_depth_m", 10.0) or 10.0)
+    min_width_dxf = metres_to_dxf(min_width_m)
+    min_depth_dxf = metres_to_dxf(min_depth_m)
+
+    candidates: list[tuple[Polygon, float, str]] = []  # (geom, score, label)
+
+    # ── Candidate 1: Rear strip (existing EDGE logic) ────────────────────────
+    rear_specs = [s for s in edge_specs if s.edge_type == REAR]
+    if rear_specs:
+        rear_spec = rear_specs[0]
+        try:
+            gdcr_min_dim_m = float(
+                cop_cfg.get("minimum_dimension_m", 7.5)
+            )
+        except Exception:
+            gdcr_min_dim_m = 7.5
+        edge_min_depth_dxf = metres_to_dxf(gdcr_min_dim_m)
+
+        # Bisect for correct depth
+        nx, ny = rear_spec.inward_normal
+        xs = [c[0] for c in plot_polygon.exterior.coords]
+        ys = [c[1] for c in plot_polygon.exterior.coords]
+        projections = [x * nx + y * ny for x, y in zip(xs, ys)]
+        max_depth = (max(projections) - min(projections)) * 0.9
+
+        lo, hi = 0.0, max_depth
+        best_strip = None
+        for _ in range(_BISECT_ITERATIONS):
+            mid = (lo + hi) / 2.0
+            strip = _rear_strip_polygon(plot_polygon, rear_spec, mid)
+            strip_area = strip.area if not strip.is_empty else 0.0
+            if strip_area < required_area:
+                lo = mid
+            else:
+                hi = mid
+                best_strip = strip
+            if (hi - lo) < _BISECT_TOLERANCE:
+                break
+
+        if hi < edge_min_depth_dxf:
+            deeper = _rear_strip_polygon(plot_polygon, rear_spec, edge_min_depth_dxf)
+            if not deeper.is_empty:
+                best_strip = deeper
+
+        if best_strip is not None and not best_strip.is_empty:
+            if isinstance(best_strip, MultiPolygon):
+                best_strip = max(best_strip.geoms, key=lambda g: g.area)
+            score = _cop_candidate_score(best_strip, plot_polygon, envelope)
+            candidates.append((best_strip, score, "REAR_STRIP"))
+
+    # ── Candidate 2: Central courtyard box ────────────────────────────────────
+    minx, miny, maxx, maxy = plot_polygon.bounds
+    bbox_w = maxx - minx
+    bbox_d = maxy - miny
+
+    if bbox_w > 0 and bbox_d > 0:
+        cx, cy = plot_polygon.centroid.x, plot_polygon.centroid.y
+
+        # Target a square-ish COP with required area
+        side = max(min_width_dxf, math.sqrt(required_area))
+        depth = max(min_depth_dxf, required_area / side if side > 0 else min_depth_dxf)
+        side = min(side, bbox_w * 0.6)   # don't exceed 60% of plot width
+        depth = min(depth, bbox_d * 0.6)
+
+        center_rect = box(cx - side / 2, cy - depth / 2, cx + side / 2, cy + depth / 2)
+        center_cop = center_rect.intersection(plot_polygon)
+
+        if not center_cop.is_empty:
+            # Scale up if area insufficient
+            if center_cop.area < required_area:
+                for scale in [1.2, 1.5, 1.8, 2.0]:
+                    scaled = box(
+                        cx - side * scale / 2, cy - depth * scale / 2,
+                        cx + side * scale / 2, cy + depth * scale / 2,
+                    ).intersection(plot_polygon)
+                    if not scaled.is_empty and scaled.area >= required_area:
+                        center_cop = scaled
+                        break
+
+            if isinstance(center_cop, MultiPolygon):
+                center_cop = max(center_cop.geoms, key=lambda g: g.area)
+
+            if center_cop.area >= required_area * 0.95:
+                score = _cop_candidate_score(center_cop, plot_polygon, envelope)
+                candidates.append((center_cop, score, "CENTER_COURTYARD"))
+
+    # ── Candidate 3: Side strips (for irregular plots) ────────────────────────
+    side_specs = [s for s in edge_specs if s.edge_type == SIDE]
+    for side_spec in side_specs[:2]:  # try up to 2 side edges
+        try:
+            nx, ny = side_spec.inward_normal
+            xs = [c[0] for c in plot_polygon.exterior.coords]
+            ys = [c[1] for c in plot_polygon.exterior.coords]
+            projections = [x * nx + y * ny for x, y in zip(xs, ys)]
+            max_side_depth = (max(projections) - min(projections)) * 0.4
+
+            lo, hi = 0.0, max_side_depth
+            best_side = None
+            for _ in range(_BISECT_ITERATIONS):
+                mid = (lo + hi) / 2.0
+                strip = _rear_strip_polygon(plot_polygon, side_spec, mid)
+                strip_area = strip.area if not strip.is_empty else 0.0
+                if strip_area < required_area:
+                    lo = mid
+                else:
+                    hi = mid
+                    best_side = strip
+                if (hi - lo) < _BISECT_TOLERANCE:
+                    break
+
+            if best_side is not None and not best_side.is_empty:
+                if isinstance(best_side, MultiPolygon):
+                    best_side = max(best_side.geoms, key=lambda g: g.area)
+                score = _cop_candidate_score(best_side, plot_polygon, envelope)
+                candidates.append((best_side, score, "SIDE_STRIP"))
+        except Exception:
+            continue
+
+    # ── Select best candidate ─────────────────────────────────────────────────
+    if not candidates:
+        logger.warning("Intelligent COP: no viable candidates — returning None.")
+        return None, 0.0, "NO_REAR_EDGE"
+
+    # Sort by score descending
+    candidates.sort(key=lambda c: c[1], reverse=True)
+    best_geom, best_score, best_label = candidates[0]
+
+    common_area = best_geom.area
+    logger.info(
+        "INTELLIGENT COP selected: %s (score=%.3f), %.1f sq.ft "
+        "(%.1f%% of plot area %.1f sq.ft). Evaluated %d candidates.",
+        best_label, best_score, common_area,
+        common_area / plot_polygon.area * 100 if plot_polygon.area > 0 else 0.0,
+        plot_polygon.area,
+        len(candidates),
+    )
+    return best_geom, round(common_area, 2), "CARVED"

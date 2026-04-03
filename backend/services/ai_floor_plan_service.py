@@ -21,14 +21,21 @@ from services.ai_floor_plan_prompt import (
     n_lifts_required,
     n_stairs_required,
     CORRIDOR_W,
+    LIFT_SHAFT_W,
+    STAIR_W,
+    WALL_T,
 )
 from services.ai_floor_plan_validator import validate_ai_floor_plan
 from services.ai_to_geojson_converter import convert_ai_layout_to_geojson
 from services.svg_blueprint_renderer import render_blueprint_svg
 from services.unit_layout_engine import layout_floor
-from concurrent.futures import ThreadPoolExecutor
-from ai_layer.image_client import generate_image
-from services.floor_plan_image_prompt import build_architectural_prompt, build_presentation_prompt
+from ai_layer.image_client import generate_image, generate_image_gemini, generate_image_recraft
+from services.floor_plan_image_prompt import (
+    PROMPT_VARIANT_SUFFIXES,
+    build_architectural_prompt,
+    compile_recraft_prompt,
+    score_generated_images,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,7 @@ def generate_ai_floor_plan(
     storey_height_m: float = 3.0,
     plot_area_sqm: float = 0.0,
     design_brief: str = "",
+    image_model: str = "dalle3",
 ) -> Dict[str, Any]:
     """
     Generate an AI-powered floor plan for a single tower.
@@ -61,11 +69,16 @@ def generate_ai_floor_plan(
     segment : budget/mid/premium/luxury
     unit_mix : e.g. ["2BHK", "3BHK"]
     design_brief : optional free-text design instructions
+    image_model : "dalle3" | "gemini" | "recraft" | "ideogram" | "flux" | "svg_only"
 
     Returns
     -------
-    dict with: status, source, layout (GeoJSON), svg_blueprint, metrics, design_notes
+    dict with: status, source, layout (GeoJSON), svg_blueprint, metrics, design_notes,
+               architectural_image, image_model_used, layout_authority_note
     """
+    import time
+    _t_start = time.monotonic()
+
     unit_mix = unit_mix or []
 
     # ---- 1. Parse footprint dimensions ----
@@ -77,17 +90,23 @@ def generate_ai_floor_plan(
     if floor_depth_m > floor_width_m:
         floor_width_m, floor_depth_m = floor_depth_m, floor_width_m
 
+    mix_label = "+".join(unit_mix) if unit_mix else "auto"
     logger.info(
-        "AI floor plan: %.1f x %.1f m, %d floors, %d units/core, segment=%s",
-        floor_width_m, floor_depth_m, n_floors, units_per_core, segment,
+        "[FP] ── START: %.1fm x %.1fm | %dF | %d units/core | %s | seg=%s | img=%s",
+        floor_width_m, floor_depth_m, n_floors, units_per_core, mix_label, segment, image_model,
     )
 
     # ---- 2. Compute derived parameters ----
     total_units_estimate = units_per_core * n_floors
     n_lifts = n_lifts_required(building_height_m, total_units_estimate)
     n_stairs = n_stairs_required(building_height_m)
+    logger.info(
+        "[FP] ── Step 1/7: Derived params — lifts=%d stairs=%d total_units≈%d",
+        n_lifts, n_stairs, total_units_estimate,
+    )
 
     # ---- 3. Build prompts ----
+    logger.info("[FP] ── Step 2/7: Building LLM prompt")
     system_prompt = build_system_prompt()
     user_prompt = build_user_prompt(
         floor_width_m=floor_width_m,
@@ -107,14 +126,18 @@ def generate_ai_floor_plan(
     model_choice = config.floor_plan_ai_model  # "claude" or "gpt-4o"
     timeout = config.floor_plan_timeout_s
     max_tokens_setting = config.floor_plan_max_tokens
+    logger.info("[FP] ── Step 3/7: LLM layout generation (model=%s, timeout=%.0fs)", model_choice, timeout)
 
     ai_layout = None
     design_notes = ""
     last_errors: List[str] = []
 
     for attempt in range(3):
+        import time as _time
+        _t_llm = _time.monotonic()
         prompt = user_prompt
         if attempt > 0 and last_errors:
+            logger.info("[FP]    Retry attempt %d/3 — injecting %d error(s) into prompt", attempt + 1, len(last_errors))
             prompt += (
                 "\n\nPREVIOUS ATTEMPT HAD ERRORS — please fix:\n"
                 + "\n".join(f"  - {e}" for e in last_errors)
@@ -129,18 +152,16 @@ def generate_ai_floor_plan(
             max_tokens=max_tokens_setting,
         )
 
+        _llm_elapsed = _time.monotonic() - _t_llm
         if not raw:
-            logger.warning("AI floor plan: LLM returned empty (attempt %d, model=%s)",
-                           attempt + 1, model_choice)
+            logger.warning("[FP]    LLM returned empty response (attempt %d, %.1fs)", attempt + 1, _llm_elapsed)
             continue
 
-        logger.debug("AI floor plan raw response (attempt %d, %d chars): %s…",
-                      attempt + 1, len(raw), raw[:200])
+        logger.info("[FP]    LLM responded (attempt %d, %d chars, %.1fs)", attempt + 1, len(raw), _llm_elapsed)
 
         parsed = _parse_ai_response(raw)
         if not parsed:
-            logger.warning("AI floor plan: JSON parse failed (attempt %d). First 500 chars: %s",
-                           attempt + 1, raw[:500])
+            logger.warning("[FP]    JSON parse failed (attempt %d) — first 300 chars: %s", attempt + 1, raw[:300])
             last_errors = ["Response was not valid JSON"]
             continue
 
@@ -152,18 +173,21 @@ def generate_ai_floor_plan(
         if validation["valid"]:
             ai_layout = validation["repaired_layout"]
             design_notes = parsed.get("design_notes", "")
+            n_units_gen = len(ai_layout.get("units", []))
+            n_rooms_gen = sum(len(u.get("rooms", [])) for u in ai_layout.get("units", []))
+            logger.info(
+                "[FP]    Validation PASSED (attempt %d) — %d units, %d rooms total, warnings=%d",
+                attempt + 1, n_units_gen, n_rooms_gen, len(validation.get("warnings", [])),
+            )
             if validation["warnings"]:
-                logger.info("AI floor plan warnings: %s", validation["warnings"])
+                logger.info("[FP]    Warnings: %s", validation["warnings"])
             break
         else:
             last_errors = validation["errors"]
-            logger.warning(
-                "AI floor plan validation failed (attempt %d): %s",
-                attempt + 1, last_errors,
-            )
+            logger.warning("[FP]    Validation FAILED (attempt %d): %s", attempt + 1, last_errors)
 
     if ai_layout is None:
-        logger.error("AI floor plan: all attempts failed, returning error")
+        logger.error("[FP]    All 3 LLM attempts failed. Last errors: %s", last_errors)
         return _error_response(
             f"AI floor plan generation failed after 3 attempts. Last errors: {last_errors}"
         )
@@ -205,10 +229,12 @@ def generate_ai_floor_plan(
                                unit.get("id"), vent_errors)
 
     # ---- 5. Snap coordinates ----
+    logger.info("[FP] ── Step 4/7: Snapping to structural grid + aligning wet zones")
     ai_layout = _snap_to_structural_grid(ai_layout, floor_width_m)
     ai_layout = _align_wet_zone_stacks(ai_layout)
 
     # ---- 6. Convert to GeoJSON ----
+    logger.info("[FP] ── Step 5/7: Converting to GeoJSON")
     geojson_layout = convert_ai_layout_to_geojson(
         ai_layout, floor_width_m, floor_depth_m,
     )
@@ -218,53 +244,106 @@ def generate_ai_floor_plan(
         ai_layout, geojson_layout, floor_width_m, floor_depth_m,
         n_floors, building_height_m, storey_height_m, n_lifts, n_stairs,
     )
+    logger.info(
+        "[FP]    Metrics: %d units/floor | %.1f%% efficiency | net BUA %.0f sqm | FSI %.3f",
+        metrics.get("nUnitsPerFloor", 0), metrics.get("efficiencyPct", 0),
+        metrics.get("netBuaSqm", 0), metrics.get("achievedFSINet", 0),
+    )
 
     # ---- 8. Render SVG fallback (always, fast) ----
+    logger.info("[FP] ── Step 6/7: Rendering SVG blueprint (%.1fm x %.1fm)", floor_width_m, floor_depth_m)
     title = f"Typical Floor Plan — {units_per_core} units/core — {segment.title()}"
     svg_blueprint = render_blueprint_svg(
         geojson_layout, floor_width_m, floor_depth_m, title=title,
     )
+    logger.info("[FP]    SVG ready (%d chars)", len(svg_blueprint) if svg_blueprint else 0)
 
-    # ---- 9. Build image prompts from validated layout ----
-    arch_prompt = build_architectural_prompt(
-        ai_layout, metrics, segment=segment, units_per_core=units_per_core,
-    )
-    pres_prompt = build_presentation_prompt(
-        ai_layout, metrics, segment=segment,
+    # ---- 9. Build image prompt (model-specific) ----
+    # For Recraft: use the deterministic Layer 1→1.5→2 pipeline which produces
+    # Surat-norm, spatially-anchored natural language optimised for Recraft V4.
+    # For all other models: use the compressed DALL-E style prompt.
+    if image_model == "recraft":
+        arch_prompt = _build_recraft_prompt(
+            floor_width_m, floor_depth_m, units_per_core,
+            unit_mix, segment, n_lifts, n_stairs,
+        ) or build_architectural_prompt(
+            ai_layout, metrics,
+            segment=segment, units_per_core=units_per_core,
+            design_brief=design_brief,
+            design_notes=design_notes or ai_layout.get("design_notes"),
+        )
+    else:
+        arch_prompt = build_architectural_prompt(
+            ai_layout,
+            metrics,
+            segment=segment,
+            units_per_core=units_per_core,
+            design_brief=design_brief,
+            design_notes=design_notes or ai_layout.get("design_notes"),
+        )
+    n_words = len(arch_prompt.split())
+    logger.info(
+        "[FP]    Image prompt built — chars=%d words≈%d",
+        len(arch_prompt),
+        n_words,
     )
 
-    # ---- 10. Generate DALL-E images in parallel (best-effort) ----
+    # ---- 10. Generate image (model-routed, best-effort) ----
     architectural_image = None
-    presentation_image = None
+    image_model_used = "svg_only"
 
-    config = get_ai_config()
-    if config.floor_plan_image_enabled and config.has_api_key():
+    if image_model != "svg_only" and config.floor_plan_image_enabled:
+        import time as _time
+        _t_img = _time.monotonic()
+        logger.info("[FP] ── Step 7/7: Image generation (model=%s)", image_model)
         try:
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                arch_future = pool.submit(
-                    generate_image, arch_prompt,
-                    size=config.dalle_size, quality=config.dalle_quality, style="natural",
-                )
-                pres_future = pool.submit(
-                    generate_image, pres_prompt,
-                    size=config.dalle_size, quality=config.dalle_quality, style="vivid",
-                )
-            architectural_image = arch_future.result()
-            presentation_image = pres_future.result()
+            n_variants = max(1, int(getattr(config, "floor_plan_image_variants", 4)))
+            arch_img, img_meta = _generate_images_for_model(
+                image_model, arch_prompt, config,
+                ai_layout=ai_layout,
+                n_variants=n_variants,
+            )
+            architectural_image = arch_img
+            image_model_used = image_model
+            _img_elapsed = _time.monotonic() - _t_img
+            logger.info(
+                "[FP]    Image done in %.1fs — variants=%s picked=%s arch=%s",
+                _img_elapsed,
+                img_meta.get("n_generated"),
+                img_meta.get("picked_index"),
+                "OK" if arch_img else "NONE",
+            )
         except Exception as e:
-            logger.warning("Image generation failed: %s", e, exc_info=False)
+            logger.warning("[FP]    Image generation error (%s): %s", image_model, e, exc_info=False)
+    else:
+        logger.info("[FP] ── Step 7/7: Skipping image generation (model=%s)", image_model)
+
+    import time as _time2
+    _total_elapsed = _time2.monotonic() - _t_start
+    logger.info(
+        "[FP] ── DONE in %.1fs | arch=%s svg=YES | model=%s",
+        _total_elapsed,
+        "YES" if architectural_image else "NO",
+        image_model_used,
+    )
 
     # ---- 11. Assemble response ----
+    layout_authority_note = (
+        "The SVG blueprint and layout JSON are dimensionally authoritative. "
+        "The raster preview is a schematic illustration and may not match exact "
+        "measurements or room adjacency."
+    )
     return {
         "status": "ok",
         "source": "ai",
         "layout": geojson_layout,
         "layout_json": ai_layout,
         "architectural_image": architectural_image,
-        "presentation_image": presentation_image,
         "svg_blueprint": svg_blueprint,
         "metrics": metrics,
         "design_notes": design_notes,
+        "image_model_used": image_model_used,
+        "layout_authority_note": layout_authority_note,
     }
 
 
@@ -691,6 +770,206 @@ def _snap_to_structural_grid(
             if new_w >= min_room_w:
                 room["w"] = new_w
     return result
+
+
+def _build_recraft_prompt(
+    floor_width_m: float,
+    floor_depth_m: float,
+    units_per_core: int,
+    unit_mix: List[str],
+    segment: str,
+    n_lifts: int,
+    n_stairs: int,
+) -> Optional[str]:
+    """
+    Build a Recraft-optimised prompt via the deterministic Layer 1→1.5→2 pipeline.
+
+    Layer 1 (unit_programme): derives RoomProgramme from GDCR/segment rules.
+    Layer 1.5 (layout_engine): places rooms with absolute coordinates.
+    Layer 2 (compile_recraft_prompt): converts RoomLayout list to natural-language prompt.
+
+    Returns None on any error so callers can fall back to build_architectural_prompt.
+    """
+    try:
+        from services.unit_programme import compute_net_usable, derive_room_programme
+        from services.layout_engine import generate_unit_layout
+
+        # Derive unit bounding box from floor plate geometry
+        core_w = max(LIFT_SHAFT_W * n_lifts + STAIR_W * n_stairs + WALL_T * 4, 4.0)
+        avail_width = floor_width_m - core_w
+        n_units_per_side = max(1, units_per_core // 2)
+        unit_w = round(avail_width / n_units_per_side, 2)
+        unit_d = round((floor_depth_m - CORRIDOR_W) / 2, 2)
+
+        unit_type = (unit_mix[0] if unit_mix else "2BHK").upper()
+        cap_segment = segment.capitalize()
+
+        # Layer 1: Room programme
+        net_usable = compute_net_usable(
+            tower_footprint_sqm=floor_width_m * floor_depth_m,
+            core_area_sqm=core_w * floor_depth_m,
+            units_per_core=units_per_core,
+            floor_plate_depth_m=floor_depth_m,
+        )
+        programme = derive_room_programme(unit_type, cap_segment, net_usable, units_per_core)
+
+        # Layer 1.5: Spatial layout
+        layouts, _result = generate_unit_layout(programme, unit_w, unit_d, units_per_core)
+
+        # Layer 2: Recraft prompt
+        return compile_recraft_prompt(
+            layouts=layouts,
+            unit_w=unit_w,
+            unit_d=unit_d,
+            unit_type=unit_type,
+            n_units=units_per_core,
+            segment=cap_segment,
+        )
+    except Exception as exc:
+        logger.warning("[FP]    _build_recraft_prompt failed (%s) — using fallback prompt", exc)
+        return None
+
+
+def _generate_one_image(
+    image_model: str,
+    prompt: str,
+    config,
+) -> Optional[str]:
+    """Single image API call for the configured provider."""
+    if image_model == "dalle3":
+        return generate_image(
+            prompt,
+            size=getattr(config, "dalle_size", "1792x1024"),
+            quality=getattr(config, "dalle_quality", "hd"),
+            style="natural",
+        )
+
+    if image_model == "gemini":
+        api_key = getattr(config, "gemini_api_key", None)
+        if not api_key:
+            logger.warning("[FP]    gemini: GEMINI_API_KEY not configured — skipping image")
+            return None
+        model = getattr(config, "gemini_image_model", "imagen-4.0-generate-001")
+        timeout = float(getattr(config, "gemini_image_timeout_s", 120.0))
+        return generate_image_gemini(prompt, api_key, model, timeout)
+
+    if image_model == "recraft":
+        api_key = getattr(config, "recraft_api_key", None)
+        if not api_key:
+            logger.warning("[FP]    recraft: RECRAFT_API_KEY not configured — skipping image")
+            return None
+        return generate_image_recraft(
+            prompt,
+            api_key,
+            model=getattr(config, "recraft_model", "recraftv4"),
+            size=getattr(config, "recraft_size", "16:9"),
+            n=1,
+            style=getattr(config, "recraft_style", None),
+            negative_prompt=getattr(config, "recraft_negative_prompt", None),
+            timeout_s=float(getattr(config, "recraft_timeout_s", 120.0)),
+        )
+
+    if image_model == "ideogram":
+        api_key = getattr(config, "ideogram_api_key", None)
+        if not api_key:
+            logger.warning("[FP]    ideogram: IDEOGRAM_API_KEY not configured — skipping image")
+            return None
+        try:
+            import httpx
+            import base64 as b64mod
+            headers = {"Api-Key": api_key, "Content-Type": "application/json"}
+            resp = httpx.post(
+                "https://api.ideogram.ai/generate",
+                headers=headers,
+                json={
+                    "image_request": {
+                        "prompt": prompt,
+                        "aspect_ratio": "ASPECT_16_9",
+                        "model": "V_2",
+                        "magic_prompt_option": "OFF",
+                    }
+                },
+                timeout=120.0,
+            )
+            resp.raise_for_status()
+            url = resp.json()["data"][0]["url"]
+            img_bytes = httpx.get(url, timeout=60.0).content
+            return b64mod.b64encode(img_bytes).decode()
+        except Exception as e:
+            logger.warning("[FP]    ideogram error: %s", e)
+            return None
+
+    if image_model == "flux":
+        fal_key = getattr(config, "fal_key", None)
+        if not fal_key:
+            logger.warning("[FP]    flux: FAL_KEY not configured — skipping image")
+            return None
+        try:
+            import httpx
+            import base64 as b64mod
+            headers = {"Authorization": f"Key {fal_key}", "Content-Type": "application/json"}
+            resp = httpx.post(
+                "https://fal.run/fal-ai/flux/dev",
+                headers=headers,
+                json={"prompt": prompt, "image_size": "landscape_16_9", "num_images": 1},
+                timeout=120.0,
+            )
+            resp.raise_for_status()
+            url = resp.json()["images"][0]["url"]
+            img_bytes = httpx.get(url, timeout=60.0).content
+            return b64mod.b64encode(img_bytes).decode()
+        except Exception as e:
+            logger.warning("[FP]    flux error: %s", e)
+            return None
+
+    logger.warning("[FP]    Unknown image_model=%s — skipping image", image_model)
+    return None
+
+
+def _variant_prompt(base: str, index: int, n_variants: int) -> str:
+    if n_variants <= 1:
+        return base
+    suf = PROMPT_VARIANT_SUFFIXES[index % len(PROMPT_VARIANT_SUFFIXES)]
+    if not suf:
+        return base
+    return f"{base}, {suf}"
+
+
+def _generate_images_for_model(
+    image_model: str,
+    arch_prompt: str,
+    config,
+    *,
+    ai_layout: Optional[Dict[str, Any]] = None,
+    n_variants: int = 4,
+) -> Tuple[Optional[str], Dict[str, Any]]:
+    """
+    Generate multiple prompt variants, score, return best base64 PNG + meta for logging.
+    """
+    meta: Dict[str, Any] = {
+        "n_requested": n_variants,
+        "n_generated": 0,
+        "picked_index": None,
+        "scores": [],
+    }
+    if image_model not in (
+        "dalle3", "gemini", "recraft", "ideogram", "flux",
+    ):
+        logger.warning("[FP]    Unknown image_model=%s — skipping image", image_model)
+        return None, meta
+
+    images: List[Optional[str]] = []
+    for i in range(max(1, n_variants)):
+        vp = _variant_prompt(arch_prompt, i, n_variants)
+        logger.debug("[FP:img] variant %d prompt_len=%d", i, len(vp))
+        one = _generate_one_image(image_model, vp, config)
+        images.append(one)
+        if one:
+            meta["n_generated"] += 1
+
+    best, score_meta = score_generated_images(images, ai_layout)
+    meta.update(score_meta)
+    return best, meta
 
 
 def _error_response(detail: str) -> Dict[str, Any]:

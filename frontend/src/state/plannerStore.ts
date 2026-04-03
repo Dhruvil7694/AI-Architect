@@ -23,14 +23,13 @@ export type PlannerSelection = {
   featureId: string;
 } | null;
 
-export type PlanningStep = "site" | "floor" | "unit";
+export type PlanningStep = "explore" | "site" | "floor";
 
-/** Two-stage planner workspace lifecycle (input → site-generating → site-generated → floor-design). */
-export type PlannerStage =
-  | "input"
-  | "site-generating"
-  | "site-generated"
-  | "floor-design";
+/**
+ * Planner workspace lifecycle (workspace route): plot input → plan job → floor design.
+ * Site canvas is skipped; the same placement job still supplies tower footprints for floor planning.
+ */
+export type PlannerStage = "input" | "plan-generating" | "floor-design";
 
 export type SelectedUnitInfo = {
   id: string;
@@ -84,7 +83,10 @@ type PlannerState = {
   plannerStage: PlannerStage;
   selectedTowerIndex: number | null;
   selectedUnit: SelectedUnitInfo | null;
+  selectedScenario: import("@/services/plannerService").ExplorationScenario | null;
   debugMode: boolean;
+  /** Selected image generation model for floor plan rendering. */
+  imageModel: string;
 };
 
 type PlannerActions = {
@@ -103,9 +105,11 @@ type PlannerActions = {
   setPlannerStage: (stage: PlannerStage) => void;
   setSelectedTowerIndex: (index: number | null) => void;
   setSelectedUnit: (unit: SelectedUnitInfo | null) => void;
+  setSelectedScenario: (scenario: import("@/services/plannerService").ExplorationScenario | null) => void;
   setDebugMode: (enabled: boolean) => void;
   toggleDebugMode: () => void;
   setLocationPreference: (pref: Partial<LocationPreference>) => void;
+  setImageModel: (model: string) => void;
 };
 
 export type PlannerStore = PlannerState & PlannerActions;
@@ -149,11 +153,13 @@ export const usePlannerStore = create<PlannerStore>((set) => ({
   selection: null,
   isInputsPanelOpen: false,
   scenarios: [],
-  planningStep: "site",
+  planningStep: "explore",
   plannerStage: "input",
   selectedTowerIndex: null,
   selectedUnit: null,
+  selectedScenario: null,
   debugMode: false,
+  imageModel: "dalle3",
 
   setSelectedPlotId: (plotId) =>
     set((state) => ({
@@ -223,10 +229,11 @@ export const usePlannerStore = create<PlannerStore>((set) => ({
       selection: null,
       scenarios: [],
       isInputsPanelOpen: true,
-      planningStep: "site",
+      planningStep: "explore",
       plannerStage: "input",
       selectedTowerIndex: null,
       selectedUnit: null,
+      selectedScenario: null,
     })),
 
   setPlannerStage: (stage) => set({ plannerStage: stage }),
@@ -234,8 +241,10 @@ export const usePlannerStore = create<PlannerStore>((set) => ({
   setPlanningStep: (step) => set({ planningStep: step }),
   setSelectedTowerIndex: (index) => set({ selectedTowerIndex: index, selectedUnit: null }),
   setSelectedUnit: (unit) => set({ selectedUnit: unit }),
+  setSelectedScenario: (scenario) => set({ selectedScenario: scenario }),
   setDebugMode: (enabled) => set({ debugMode: enabled }),
   toggleDebugMode: () => set((s) => ({ debugMode: !s.debugMode })),
+  setImageModel: (model) => set({ imageModel: model }),
 
   setLocationPreference: (pref) => {
     set((state) => {

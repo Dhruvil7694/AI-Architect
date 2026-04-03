@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        .test-box {
+            background: white;
+            border: 2px solid #333;
+            padding: 20px;
+            margin: 20px;
+            cursor: pointer;
+        }
+        .test-box:hover {
+            background: #e0e0e0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #555;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Click Test Page</h1>
+    <p>If you can interact with elements below, the browser is working fine.</p>
+    
+    <div class="test-box" onclick="alert('Box clicked!')">
+        Click this box
+    </div>
+    
+    <button onclick="alert('Button clicked!')">Click this button</button>
+    
+    <br><br>
+    
+    <input type="text" placeholder="Type here to test input">
+    
+    <script>
+        console.log('Test page loaded successfully');
+    </script>
+</body>
+</html>

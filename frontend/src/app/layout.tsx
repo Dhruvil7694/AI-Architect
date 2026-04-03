@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
-import { ReactQueryProvider } from "@/lib/react-query-provider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+import { ReactQueryProvider } from "@/lib/react-query-provider";
+import Toaster from "@/components/Toaster";
+import CookieConsent from "@/components/CookieConsent";
+import { AuthHydration } from "@/components/AuthHydration";
+import { AuthGate } from "@/components/AuthGate";
+
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const outfit = Outfit({
+  variable: "--font-outfit",
   subsets: ["latin"],
 });
 
@@ -27,9 +32,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-neutral-950 text-neutral-50`}
+        className={`${inter.variable} ${outfit.variable} antialiased font-sans`}
       >
-        <ReactQueryProvider>{children}</ReactQueryProvider>
+        <ReactQueryProvider>
+          <AuthHydration />
+          <AuthGate>
+            {children}
+            <Toaster />
+            <CookieConsent />
+          </AuthGate>
+        </ReactQueryProvider>
       </body>
     </html>
   );

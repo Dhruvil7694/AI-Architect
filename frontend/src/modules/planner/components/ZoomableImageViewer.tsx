@@ -2,17 +2,13 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 
-type ViewMode = "architectural" | "presentation" | "svg";
-
 type ZoomableImageViewerProps = {
   architecturalImage: string | null;
-  presentationImage: string | null;
   svgFallback: string | null;
 };
 
 export function ZoomableImageViewer({
   architecturalImage,
-  presentationImage,
   svgFallback,
 }: ZoomableImageViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -20,21 +16,13 @@ export function ZoomableImageViewer({
   const [dragging, setDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
 
-  // Determine available modes
-  const hasArch = !!architecturalImage;
-  const hasPres = !!presentationImage;
-  const hasSvg = !!svgFallback;
-  const hasImages = hasArch || hasPres;
+  const showSvg = !architecturalImage && !!svgFallback;
 
-  const defaultMode: ViewMode = hasArch ? "architectural" : hasPres ? "presentation" : "svg";
-  const [mode, setMode] = useState<ViewMode>(defaultMode);
-
-  // Reset mode when data changes
+  // Fit to view on content change
   useEffect(() => {
-    setMode(hasArch ? "architectural" : hasPres ? "presentation" : "svg");
-  }, [hasArch, hasPres]);
+    setTransform({ x: 0, y: 0, scale: 1 });
+  }, [architecturalImage, svgFallback]);
 
-  // Fit image/SVG to container
   const fitInView = useCallback(() => {
     setTransform({ x: 0, y: 0, scale: 1 });
   }, []);
@@ -88,63 +76,13 @@ export function ZoomableImageViewer({
 
   const stopDrag = useCallback(() => setDragging(false), []);
 
-  // Current content
-  const currentSrc =
-    mode === "architectural"
-      ? architecturalImage
-      : mode === "presentation"
-        ? presentationImage
-        : null;
-
   return (
     <div className="flex h-full w-full flex-col">
-      {/* Tab bar + zoom controls */}
+      {/* Toolbar */}
       <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-1.5">
-        <div className="flex items-center gap-1">
-          {hasImages && (
-            <>
-              {hasArch && (
-                <button
-                  type="button"
-                  onClick={() => setMode("architectural")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    mode === "architectural"
-                      ? "bg-neutral-900 text-white"
-                      : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
-                  }`}
-                >
-                  Architectural
-                </button>
-              )}
-              {hasPres && (
-                <button
-                  type="button"
-                  onClick={() => setMode("presentation")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    mode === "presentation"
-                      ? "bg-neutral-900 text-white"
-                      : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
-                  }`}
-                >
-                  Presentation
-                </button>
-              )}
-              {hasSvg && (
-                <button
-                  type="button"
-                  onClick={() => setMode("svg")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    mode === "svg"
-                      ? "bg-neutral-900 text-white"
-                      : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
-                  }`}
-                >
-                  SVG
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        <span className="text-[11px] text-neutral-400">
+          {showSvg ? "SVG Blueprint" : architecturalImage ? "Floor Plan" : "No image"}
+        </span>
 
         <div className="flex items-center gap-1">
           <button
@@ -202,17 +140,15 @@ export function ZoomableImageViewer({
             lineHeight: 0,
           }}
         >
-          {mode === "svg" && svgFallback ? (
-            <div dangerouslySetInnerHTML={{ __html: svgFallback }} />
-          ) : currentSrc ? (
+          {architecturalImage ? (
             <img
-              src={`data:image/png;base64,${currentSrc}`}
-              alt={`Floor plan — ${mode} view`}
+              src={`data:image/png;base64,${architecturalImage}`}
+              alt="Floor plan"
               draggable={false}
               className="max-w-none"
             />
-          ) : hasSvg ? (
-            <div dangerouslySetInnerHTML={{ __html: svgFallback! }} />
+          ) : svgFallback ? (
+            <div dangerouslySetInnerHTML={{ __html: svgFallback }} />
           ) : (
             <div className="flex items-center justify-center p-12 text-sm text-neutral-400">
               No image available
@@ -222,14 +158,7 @@ export function ZoomableImageViewer({
       </div>
 
       {/* Status bar */}
-      <div className="flex items-center justify-between border-t border-neutral-100 px-3 py-1 text-[10px] text-neutral-400">
-        <span>
-          {mode === "svg"
-            ? "SVG Blueprint"
-            : mode === "architectural"
-              ? "Architectural Drawing (DALL-E 3)"
-              : "Presentation Rendering (DALL-E 3)"}
-        </span>
+      <div className="flex items-center justify-end border-t border-neutral-100 px-3 py-1 text-[10px] text-neutral-400">
         <span>Scroll to zoom · Drag to pan</span>
       </div>
     </div>

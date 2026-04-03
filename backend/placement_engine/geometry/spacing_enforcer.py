@@ -58,11 +58,26 @@ def required_spacing_m(building_height_m: float) -> float:
     """
     Return the required inter-building clear distance in metres per GDCR.
 
-    Formula: max(H / 3, minimum_spacing_m)
-    The minimum_spacing_m default (3.0 m) is loaded from GDCR.yaml.
+    Preferred mode (when configured):
+        Table lookup by building height (inter_building_margin.height_spacing_map)
+
+    Fallback mode:
+        Formula max(H / 3, minimum_spacing_m)
     """
     cfg = _load_gdcr_inter_building()
     min_spacing = float(cfg.get("minimum_spacing_m", 3.0))
+    spacing_map = cfg.get("height_spacing_map") or []
+    if spacing_map:
+        for entry in spacing_map:
+            try:
+                if building_height_m <= float(entry["height_max"]):
+                    return max(float(entry["margin"]), min_spacing)
+            except (KeyError, TypeError, ValueError):
+                continue
+        try:
+            return max(float(spacing_map[-1]["margin"]), min_spacing)
+        except (KeyError, TypeError, ValueError):
+            pass
     return max(building_height_m / 3.0, min_spacing)
 
 

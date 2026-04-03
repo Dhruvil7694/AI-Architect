@@ -35,6 +35,7 @@ from architecture.feasibility.compliance_summary import (
     build_compliance_summary_from_rule_results,
 )
 from architecture.feasibility.constants import DEFAULT_STOREY_HEIGHT_M
+from common.units import dxf_plane_area_to_sqm, sqm_to_sqft
 
 
 logger = logging.getLogger(__name__)
@@ -106,11 +107,14 @@ def build_feasibility_from_pipeline(
             core_r = skeleton.area_summary.get("core_ratio")
             circ = skeleton.area_summary.get("circulation_ratio")
 
+        fp_area_intl_sqft = sqm_to_sqft(
+            dxf_plane_area_to_sqm(float(fp.area_sqft or 0.0))
+        )
         buildability = build_buildability_metrics(
             envelope_area_sqft=env_sqft,
             footprint_width_m=fp.width_m,
             footprint_depth_m=fp.depth_m,
-            footprint_area_sqft=fp.area_sqft,
+            footprint_area_sqft=fp_area_intl_sqft,
             core_area_sqm=cv.core_area_estimate_sqm,
             remaining_usable_sqm=cv.remaining_usable_sqm,
             efficiency_ratio=eff,
@@ -136,7 +140,9 @@ def build_feasibility_from_pipeline(
         achieved_gc_pct = 100.0 * footprint_sqft / plot_area_sqft
     else:
         achieved_gc_pct = envelope_result.ground_coverage_pct or 0.0
-    cop_provided = envelope_result.common_plot_area_sqft or 0.0
+    cop_provided = sqm_to_sqft(
+        dxf_plane_area_to_sqm(float(envelope_result.common_plot_area_sqft or 0.0))
+    )
 
     spacing_provided_m = None
     if placement_result.placement_audit:

@@ -30,9 +30,7 @@ from envelope_engine.services.envelope_service import compute_envelope
 from placement_engine.services.placement_service import compute_placement
 
 from compliance.gdcr_config import load_gdcr_config
-
-
-SQFT_TO_SQM = 0.092903
+from common.units import dxf_plane_area_to_sqm, sqft_to_sqm
 
 
 @dataclass
@@ -263,7 +261,7 @@ class Command(BaseCommand):
         selected_cop_area_sqft: float = float(
             getattr(dev_result, "cop_area_sqft", 0.0) or 0.0
         )
-        selected_cop_area_sqm: float = selected_cop_area_sqft * SQFT_TO_SQM
+        selected_cop_area_sqm: float = dxf_plane_area_to_sqm(selected_cop_area_sqft)
         selected_cop_margin_m = getattr(dev_result, "cop_margin_m", None)
 
         # ── STEP 5 — Envelope computation breakdown ────────────────────────────
@@ -284,9 +282,9 @@ class Command(BaseCommand):
         )
 
         if env.envelope_area_sqft is not None:
-            envelope_area_sqm = env.envelope_area_sqft * SQFT_TO_SQM
+            envelope_area_sqm = dxf_plane_area_to_sqm(float(env.envelope_area_sqft))
         elif env.envelope_polygon is not None:
-            envelope_area_sqm = env.envelope_polygon.area * SQFT_TO_SQM
+            envelope_area_sqm = dxf_plane_area_to_sqm(float(env.envelope_polygon.area))
         else:
             envelope_area_sqm = 0.0
 
@@ -295,8 +293,14 @@ class Command(BaseCommand):
         self.stdout.write(f"Envelope Status      : {env.status}")
         self.stdout.write(f"Envelope Area (sqm)  : {envelope_area_sqm:.3f}")
 
-        if env.envelope_area_sqft is not None and plot.plot_area_sqft:
-            lost_pct = (1.0 - (env.envelope_area_sqft / float(plot.plot_area_sqft))) * 100.0
+        if env.envelope_area_sqft is not None and float(plot.area_geometry) > 0:
+            lost_pct = (
+                1.0
+                - (
+                    float(env.envelope_area_sqft)
+                    / float(plot.area_geometry)
+                )
+            ) * 100.0
             self.stdout.write(f"Plot Lost to Margins : {lost_pct:.2f}%")
         else:
             self.stdout.write("Plot Lost to Margins : N/A")
@@ -305,7 +309,7 @@ class Command(BaseCommand):
         effective_cop_area_sqft = float(
             getattr(env, "common_plot_area_sqft", None) or selected_cop_area_sqft
         )
-        effective_cop_area_sqm = effective_cop_area_sqft * SQFT_TO_SQM
+        effective_cop_area_sqm = dxf_plane_area_to_sqm(effective_cop_area_sqft)
         cop_margin_m = getattr(env, "cop_margin_m", None)
         if cop_margin_m is None:
             cop_margin_m = selected_cop_margin_m
@@ -385,7 +389,7 @@ class Command(BaseCommand):
 
         per_tower_footprint_sqm: List[float] = []
         for idx, fp in enumerate(placement.footprints or []):
-            area_sqm = fp.area_sqft * SQFT_TO_SQM
+            area_sqm = dxf_plane_area_to_sqm(float(fp.area_sqft or 0.0))
             per_tower_footprint_sqm.append(area_sqm)
             self.stdout.write(f"  Tower {idx}: footprint={area_sqm:.3f} sqm")
 
@@ -424,7 +428,7 @@ class Command(BaseCommand):
         # Prefer optimiser's canonical BUA/FSI when available to avoid divergence
         # between optimisation loop and diagnostic re-computation.
         if dev_ok and dev_result.total_bua_sqft > 0:
-            actual_bua_sqm = float(dev_result.total_bua_sqft) * SQFT_TO_SQM
+            actual_bua_sqm = sqft_to_sqm(float(dev_result.total_bua_sqft))
             fsi_utilization = (
                 float(dev_result.achieved_fsi) / reg.maximum_fsi
                 if reg.maximum_fsi > 0

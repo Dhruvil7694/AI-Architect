@@ -41,6 +41,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Optional
 
+from rules_engine.rules.loader import get_gdcr_config, get_nbc_config
+
 
 # ── Status / pattern constants ─────────────────────────────────────────────────
 
@@ -167,7 +169,7 @@ def validate_core_fit(
     CoreValidationResult — fully populated with status, pattern, areas, audit.
     """
     if dims is None:
-        dims = CoreDimensions()
+        dims = _dimensions_from_config()
 
     # ── Guard ──────────────────────────────────────────────────────────────────
     if building_height_m <= 0 or width_m <= 0 or depth_m <= 0:
@@ -249,7 +251,10 @@ def validate_core_fit(
         unit_area     = (width_m - core_pkg_w) * depth_m
         corridor_area = dims.corridor_m * (width_m - core_pkg_w)
         remaining     = max(0.0, unit_area - corridor_area)
-        core_area     = core_pkg_w * depth_m
+        # Core occupies core_pkg_w × core_pkg_d (stair run depth), not the full
+        # footprint depth.  Using depth_m was an 11× overestimate that inflated
+        # FSI exclusion accounting for every plot.
+        core_area     = core_pkg_w * core_pkg_d
         return CoreValidationResult(
             core_fit_status=CORE_VALID,
             selected_pattern=PATTERN_DOUBLE,
@@ -266,7 +271,7 @@ def validate_core_fit(
         # Remaining usable: unit side minus corridor
         unit_depth = depth_m - dims.corridor_m
         remaining  = max(0.0, (width_m - core_pkg_w) * unit_depth)
-        core_area  = core_pkg_w * depth_m
+        core_area  = core_pkg_w * core_pkg_d
         return CoreValidationResult(
             core_fit_status=CORE_VALID,
             selected_pattern=PATTERN_SINGLE,
@@ -282,7 +287,7 @@ def validate_core_fit(
     if ec_pass:
         remaining_w = width_m - core_pkg_w
         remaining   = max(0.0, remaining_w * depth_m)
-        core_area   = core_pkg_w * depth_m
+        core_area   = core_pkg_w * core_pkg_d
         return CoreValidationResult(
             core_fit_status=CORE_VALID,
             selected_pattern=PATTERN_END,
@@ -339,3 +344,54 @@ def _no_fit_result(
         core_pkg_depth_m=0.0,
         audit_log=[{"reason": reason}],
     )
+
+
+def _dimensions_from_config() -> CoreDimensions:
+    """
+    Build CoreDimensions from GDCR/NBC config with safe defaults.
+
+    Priority:
+      1) GDCR residential_essential_norms (project planning defaults)
+      2) NBC egress staircase/corridor minima
+      3) CoreDimensions dataclass defaults
+    """
+    dims = CoreDimensions()
+    try:
+        gdcr = get_gdcr_config() or {}
+        nbc = get_nbc_config() or {}
+
+        essentials = (gdcr.get("residential_essential_norms") or {})
+        vcir = (essentials.get("vertical_circulation") or {})
+        hcir = (essentials.get("horizontal_circulation") or {})
+
+        gdcr_stair = vcir.get("stair") or {}
+        gdcr_lift = vcir.get("lift") or {}
+        gdcr_fire_stair = vcir.get("fire_stair") or {}
+        gdcr_corridor = (hcir.get("corridor") or {})
+
+        nbc_egress = ((nbc.get("nbc") or {}).get("egress") or {})
+        nbc_stair = (nbc_egress.get("staircase") or {})
+        nbc_corridor = (nbc_egress.get("corridor_width") or {})
+
+        dims.stair_width_m = float(
+            gdcr_stair.get(
+                "min_width_m",
+                nbc_stair.get("minimum_width_m", {}).get("low_rise", dims.stair_width_m),
+            )
+        )
+        dims.lift_threshold_m = float(gdcr_lift.get("mandatory_above_height_m", dims.lift_threshold_m))
+        dims.highrise_threshold_m = float(
+            gdcr_fire_stair.get("required_above_height_m", dims.highrise_threshold_m)
+        )
+        dims.corridor_m = float(
+            gdcr_corridor.get(
+                "planning_min_width_m",
+                nbc_corridor.get("minimum_m", dims.corridor_m),
+            )
+        )
+        flat = essentials.get("flat_level_planning") or {}
+        dims.min_unit_depth_m = float(flat.get("min_unit_planning_depth_m", dims.min_unit_depth_m))
+    except Exception:
+        # Keep default dimensions if config has missing/malformed keys.
+        pass
+    return dims

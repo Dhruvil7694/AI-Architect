@@ -12,8 +12,47 @@ from django.core.management.base import BaseCommand, CommandError
 
 from tp_ingestion.models import Plot
 
-from architecture.spatial.road_edge_detector import detect_road_edges_with_meta
+from architecture.spatial.road_edge_detector import (
+    detect_road_edges_with_meta,
+    select_governing_road_edges,
+)
 from architecture.feasibility.constants import DEFAULT_STOREY_HEIGHT_M
+
+
+FIDELITY_PROFILE_TP14_V1 = "tp14_fidelity_v1"
+
+
+def _parse_road_edges(road_edges_raw: str) -> list[int]:
+    if not road_edges_raw:
+        return []
+    out: list[int] = []
+    for part in str(road_edges_raw).split(","):
+        p = part.strip()
+        if not p:
+            continue
+        try:
+            idx = int(p)
+        except ValueError:
+            continue
+        if idx >= 0:
+            out.append(idx)
+    return sorted(set(out))
+
+
+def _load_benchmark_fp_numbers(path: str) -> set[str]:
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if "fp_number" not in (reader.fieldnames or []):
+            raise CommandError("Benchmark CSV must contain `fp_number` column.")
+        return {str(r.get("fp_number", "")).strip() for r in reader if str(r.get("fp_number", "")).strip()}
+
+
+def _fp_sort_key(fp_number: str) -> tuple[int, int, str]:
+    s = str(fp_number)
+    try:
+        return (0, int(s.split("/")[0]), s)
+    except ValueError:
+        return (1, 0, s)
 
 
 def _classify_winner_mix(mix_str: str) -> str:
@@ -118,6 +157,9 @@ def _run_one_plot(
     road_width: float,
     storey_height_m: float | None,
     mixed_strategy: bool = False,
+    fidelity_profile: str = "",
+    strict_missing_road_width: bool = True,
+    maximize_fsi: bool = False,
 ) -> dict:
     """Run full pipeline for one plot. Return dict of all parameters; use empty/status for failures."""
     fp_number = plot.fp_number
@@ -166,14 +208,66 @@ def _run_one_plot(
         "mixed_fsi_usage_pct": "",
         "mixed_units_per_floor": "",
         "mixed_total_units": "",
+        # Fidelity metadata (blank outside fidelity profile runs)
+        "fidelity_profile_id": "",
+        "road_width_source": "",
+        "road_edge_source": "",
+        "road_edge_count": "",
+        "governing_road_edge_count": "",
+        "governing_road_edges": "",
+        "corridor_eligible": "",
+        "corridor_distance_m": "",
+        "fsi_zone": "",
+        "fsi_authority": "",
+        "counted_bua_sqft": "",
+        "premium_additional_fsi_used": "",
+        "fidelity_flag": "",
+        "compliance_pass": "N",
     }
 
     storey_m = storey_height_m if storey_height_m is not None else DEFAULT_STOREY_HEIGHT_M
 
+    road_width_used = road_width
+    road_width_source = "CLI_FIXED"
+    road_edge_source = ""
+    road_edges: list[int] = []
+    fallback_used = False
+
+    if fidelity_profile == FIDELITY_PROFILE_TP14_V1:
+        row["fidelity_profile_id"] = fidelity_profile
+        pw = float(getattr(plot, "road_width_m", 0.0) or 0.0)
+        if pw > 0.0:
+            road_width_used = pw
+            road_width_source = "PLOT_FIELD"
+        else:
+            road_width_source = "MISSING"
+            row["road_width_source"] = road_width_source
+            row["fidelity_flag"] = "ROAD_WIDTH_MISSING"
+            row["envelope_status"] = "SKIPPED"
+            row["error"] = "Road width missing in Plot.road_width_m under fidelity profile."
+            if strict_missing_road_width:
+                return row
+            road_width_used = road_width
+            row["fidelity_flag"] = "ROAD_WIDTH_MISSING_FALLBACK_CLI"
+
     # Road edges
     try:
-        road_edges, fallback_used = detect_road_edges_with_meta(plot.geom, None)
+        edges_from_field = _parse_road_edges(getattr(plot, "road_edges", ""))
+        if fidelity_profile == FIDELITY_PROFILE_TP14_V1 and edges_from_field:
+            road_edges = edges_from_field
+            fallback_used = False
+            road_edge_source = "ROAD_EDGES_FIELD"
+        else:
+            road_edges, fallback_used = detect_road_edges_with_meta(plot.geom, None)
+            road_edge_source = "FALLBACK_LONGEST_EDGE" if fallback_used else "DETECTED_GEOMETRY"
         row["fallback_road_used"] = "Y" if fallback_used else "N"
+        selected_road_edges, road_meta = select_governing_road_edges(plot.geom, road_edges)
+        road_edges = selected_road_edges or road_edges
+        row["road_edge_source"] = road_edge_source
+        row["road_edge_count"] = int(road_meta.get("total_road_edges_detected", len(road_edges)))
+        row["governing_road_edge_count"] = len(road_edges)
+        row["governing_road_edges"] = ",".join(str(i) for i in road_edges)
+        row["road_width_source"] = road_width_source
     except Exception as e:
         row["envelope_status"] = "ERROR"
         row["error"] = str(e)[:200]
@@ -184,6 +278,81 @@ def _run_one_plot(
         row["error"] = "No road edge detected"
         return row
 
+    if maximize_fsi:
+        from architecture.regulatory.development_optimizer import evaluate_development_configuration
+        from architecture.regulatory_accessors import get_dynamic_max_fsi, get_max_fsi, get_max_ground_coverage_pct
+
+        solution = evaluate_development_configuration(
+            plot=plot,
+            storey_height_m=storey_m,
+            min_width_m=5.0,
+            min_depth_m=3.5,
+            mode="development",
+            debug=False,
+        )
+        if solution.n_towers <= 0 or solution.floors <= 0:
+            row["envelope_status"] = "INFEASIBLE"
+            row["placement_status"] = "INFEASIBLE"
+            row["compliance_status"] = "NON-COMPLIANT"
+            row["compliance_pass"] = "N"
+            row["error"] = "No feasible max-FSI development configuration found."
+            return row
+
+        try:
+            fsi_max = get_dynamic_max_fsi(
+                float(plot_area_sqft),
+                road_width_used,
+                plot=plot,
+                authority=None,
+                zone=None,
+            )
+        except Exception:
+            fsi_max = get_max_fsi()
+
+        row["envelope_status"] = "VALID"
+        row["placement_status"] = "VALID"
+        row["core_status"] = "OPTIMIZED"
+        row["skeleton_status"] = "OPTIMIZED"
+        row["skeleton_valid"] = "Y"
+        row["compliance_status"] = "COMPLIANT"
+        row["compliance_pass"] = "Y"
+        row["fsi_achieved"] = round(float(solution.achieved_fsi), 4)
+        row["fsi_max"] = round(float(fsi_max), 2)
+        row["gc_achieved_pct"] = round(float(solution.gc_utilization_pct), 2)
+        row["gc_permissible_pct"] = round(float(get_max_ground_coverage_pct()), 2)
+        row["cop_provided_sqft"] = round(float(solution.cop_area_sqft or 0.0), 2)
+        row["cop_required_sqft"] = round(float(plot_area_sqft) * 0.10, 2)
+        if row["cop_required_sqft"]:
+            row["cop_pct"] = round(100.0 * float(row["cop_provided_sqft"]) / float(row["cop_required_sqft"]), 2)
+        row["storey_height_used_m"] = round(storey_m, 2)
+        row["num_floors_estimated"] = int(solution.floors)
+        row["counted_bua_sqft"] = round(float(getattr(solution, "exclusion_adjusted_bua_sqft", 0.0) or 0.0), 2)
+        pb = getattr(solution, "premium_breakdown", None) or {}
+        row["premium_additional_fsi_used"] = pb.get("additional_fsi_used", "")
+        try:
+            from architecture.regulatory.fsi_policy import resolve_fsi_policy
+            d = resolve_fsi_policy(
+                plot=plot,
+                road_width_m=road_width_used,
+                authority_override=None,
+                zone_override=None,
+                distance_to_wide_road_m=None,
+            )
+            row["corridor_eligible"] = "Y" if d.corridor_eligible else "N"
+            row["corridor_distance_m"] = round(float(d.corridor_distance_m), 3) if d.corridor_distance_m is not None else ""
+            row["fsi_zone"] = d.zone
+            row["fsi_authority"] = d.authority
+        except Exception:
+            pass
+        if solution.per_tower_footprint_sqft:
+            footprint_sqft = float(solution.per_tower_footprint_sqft[0])
+            row["efficiency_pct"] = ""
+            row["footprint_width_m"] = ""
+            row["footprint_depth_m"] = ""
+        row["core_failed"] = "N"
+        row["error"] = ""
+        return row
+
     # Envelope
     from envelope_engine.services.envelope_service import compute_envelope
 
@@ -191,7 +360,7 @@ def _run_one_plot(
         envelope_result = compute_envelope(
             plot_wkt=plot.geom.wkt,
             building_height=height,
-            road_width=road_width,
+            road_width=road_width_used,
             road_facing_edges=road_edges,
         )
     except Exception as e:
@@ -292,7 +461,7 @@ def _run_one_plot(
     num_floors_est = max(1, int(height / storey_m)) if storey_m > 0 else 1
     footprint_sqft = placement_result.footprints[0].area_sqft
     rule_params = {
-        "road_width": road_width,
+        "road_width": road_width_used,
         "building_height": height,
         "total_bua": footprint_sqft * num_floors_est,
         "num_floors": num_floors_est,
@@ -317,7 +486,7 @@ def _run_one_plot(
         envelope_result=envelope_result,
         placement_result=placement_result,
         building_height_m=height,
-        road_width_m=road_width,
+        road_width_m=road_width_used,
         tp_scheme=plot.tp_scheme,
         fp_number=fp_number,
         skeleton=skeleton,
@@ -330,6 +499,7 @@ def _run_one_plot(
     comp = agg.compliance_summary
 
     row["compliance_status"] = "COMPLIANT" if (comp and comp.compliant) else "NON-COMPLIANT"
+    row["compliance_pass"] = "Y" if row["compliance_status"] == "COMPLIANT" else "N"
     row["fsi_achieved"] = round(rm.achieved_fsi, 4)
     row["fsi_max"] = round(rm.max_fsi, 2)
     row["gc_achieved_pct"] = round(rm.achieved_gc_pct, 2)
@@ -395,6 +565,30 @@ class Command(BaseCommand):
         parser.add_argument("--output", type=str, default="tp_simulation_results.csv", help="Output CSV path")
         parser.add_argument("--limit", type=int, default=None, help="Max number of plots (default: all)")
         parser.add_argument(
+            "--benchmark-set",
+            type=str,
+            default="",
+            help="Optional CSV path with `fp_number` column to run a fixed benchmark subset.",
+        )
+        parser.add_argument(
+            "--fidelity-profile",
+            type=str,
+            default="",
+            help=f"Fidelity profile id (supported: {FIDELITY_PROFILE_TP14_V1}).",
+        )
+        parser.add_argument(
+            "--strict-missing-road-width",
+            action="store_true",
+            dest="strict_missing_road_width",
+            help="When fidelity profile is active, skip plots missing Plot.road_width_m.",
+        )
+        parser.add_argument(
+            "--maximize-fsi",
+            action="store_true",
+            dest="maximize_fsi",
+            help="Use development optimizer to report maximum compliant FSI per plot (ignores fixed-height scoring intent).",
+        )
+        parser.add_argument(
             "--mixed-strategy",
             action="store_true",
             dest="mixed_strategy",
@@ -407,19 +601,28 @@ class Command(BaseCommand):
         road_width = options["road_width"]
         out_path = options["output"]
         limit = options["limit"]
+        benchmark_set = (options.get("benchmark_set") or "").strip()
+        fidelity_profile = (options.get("fidelity_profile") or "").strip()
+        strict_missing_road_width = bool(options.get("strict_missing_road_width"))
+        maximize_fsi = bool(options.get("maximize_fsi"))
         storey_height = options.get("storey_height")
         mixed_strategy = options.get("mixed_strategy", False)
 
-        plots = list(
-            Plot.objects.filter(tp_scheme=f"TP{tp}").order_by("fp_number")
-        )
+        plots = list(Plot.objects.filter(tp_scheme=f"TP{tp}").order_by("fp_number"))
+        if benchmark_set:
+            wanted = _load_benchmark_fp_numbers(benchmark_set)
+            plots = [p for p in plots if str(p.fp_number) in wanted]
+        plots = sorted(plots, key=lambda p: _fp_sort_key(p.fp_number))
         if limit is not None:
             plots = plots[:limit]
 
         if not plots:
             raise CommandError(f"No plots found for TP{tp}")
 
-        self.stdout.write(f"Running simulation on {len(plots)} plots (TP{tp}, H={height}m, road={road_width}m)…")
+        profile_msg = f", profile={fidelity_profile}" if fidelity_profile else ""
+        self.stdout.write(
+            f"Running simulation on {len(plots)} plots (TP{tp}, H={height}m, road={road_width}m{profile_msg})..."
+        )
 
         columns = [
             "fp_number", "plot_area_sqft", "plot_area_sqm", "shape_class", "frontage_m", "depth_m",
@@ -428,18 +631,32 @@ class Command(BaseCommand):
             "gc_permissible_pct", "cop_provided_sqft", "cop_required_sqft", "cop_pct",
             "storey_height_used_m", "num_floors_estimated", "footprint_width_m", "footprint_depth_m",
             "efficiency_pct", "core_failed", "fallback_road_used", "error",
-        "strategy_unit_type", "strategy_units_per_floor", "strategy_floors", "strategy_total_units",
-        "strategy_fsi_usage_pct", "strategy_efficiency_pct",
-        "mixed_mix", "mixed_is_mixed", "mixed_diversity_score", "mixed_fsi_usage_pct",
-        "mixed_units_per_floor", "mixed_total_units",
-    ]
+            "strategy_unit_type", "strategy_units_per_floor", "strategy_floors", "strategy_total_units",
+            "strategy_fsi_usage_pct", "strategy_efficiency_pct",
+            "mixed_mix", "mixed_is_mixed", "mixed_diversity_score", "mixed_fsi_usage_pct",
+            "mixed_units_per_floor", "mixed_total_units",
+            "fidelity_profile_id", "road_width_source", "road_edge_source", "fidelity_flag",
+            "road_edge_count", "governing_road_edge_count", "governing_road_edges",
+            "corridor_eligible", "corridor_distance_m", "fsi_zone", "fsi_authority",
+            "counted_bua_sqft", "premium_additional_fsi_used",
+            "compliance_pass",
+        ]
 
         rows = []
         for i, plot in enumerate(plots):
-            row = _run_one_plot(plot, height, road_width, storey_height, mixed_strategy)
+            row = _run_one_plot(
+                plot,
+                height,
+                road_width,
+                storey_height,
+                mixed_strategy,
+                fidelity_profile=fidelity_profile,
+                strict_missing_road_width=strict_missing_road_width,
+                maximize_fsi=maximize_fsi,
+            )
             rows.append(row)
             if (i + 1) % 20 == 0:
-                self.stdout.write(f"  Processed {i + 1}/{len(plots)}…")
+                self.stdout.write(f"  Processed {i + 1}/{len(plots)}...")
 
         out_dir = os.path.dirname(out_path)
         if out_dir:

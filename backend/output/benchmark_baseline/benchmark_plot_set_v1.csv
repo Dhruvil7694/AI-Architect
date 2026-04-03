@@ -1,0 +1,25 @@
+tp_scheme,fp_number,cohort_label,rationale
+TP14,90,small_regular,very small compact baseline
+TP14,3,small_regular,small compact rectangular-ish
+TP14,18,small_regular,small with moderate elongation
+TP14,171,small_irregular,small with lower compactness
+TP14,31,medium_regular,mid-size stable geometry
+TP14,169,medium_regular,mid-size compact
+TP14,29,medium_regular,mid-size with typical road width
+TP14,176,medium_thin,mid-size but thin/high aspect
+TP14,173,large_thin,large and elongated edge case
+TP14,107,large_regular,large stable benchmark
+TP14,23,large_thin,large with higher aspect ratio
+TP14,132,large_irregular,large low-compactness geometry
+TP14,127,large_irregular,large strategic test plot
+TP14,133,large_road_sensitive,largest plot with very wide road
+TP14,181,irregular_extreme,lowest compactness and highest aspect
+TP14,178,irregular_extreme,very low compactness
+TP14,152,irregular_mid,irregular medium-large footprint
+TP14,48,irregular_mid,irregular medium footprint
+TP14,21,irregular_mid,irregular + deeper aspect
+TP14,34,irregular_large,large irregular near square bbox
+TP14,17,thin_high_aspect,high aspect with road width 18
+TP14,84,thin_high_aspect,high aspect with moderate compactness
+TP14,55,thin_high_aspect,high aspect and road width 30
+TP14,54,thin_high_aspect,high aspect with compact envelope

@@ -1,0 +1,176 @@
+fp_number,road_width_m,authority,zone,corridor_eligible,corridor_distance_m,max_fsi,achieved_fsi,gross_bua_sqft,counted_bua_sqft,premium_additional_fsi_used,premium_amount_total_inr,check_corridor_geometry,check_legal_gating,check_exclusion_adjusted_fsi,check_premium_breakdown,check_end_to_end_feasible,overall_100_mode,notes,status,reason,feasibility_detail
+1,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 6 (ROAD
+10,15.0,SUDA,R1,N,,2.7,1.0054,3156.23,3156.23,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+100,,,,,,,,,,,,,,,,,,,SKIPPED,missing_road_width,
+101,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(4/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 4 (ROAD; placement_fail(1)
+104,15.0,SUDA,R1,N,,2.7,0.8484,2524.59,2524.59,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+105,15.0,SUDA,R1,N,,2.7,0.6828,5800.29,5800.29,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+106,15.0,SUDA,R1,N,,2.7,1.1656,4500.32,4500.32,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+107,12.0,SUDA,R1,N,,2.7,1.1417,13396.02,13396.02,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+108,18.0,SUDA,R1,N,,2.7,1.9453,11271.35,11271.35,0.1453,1001120.9,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+109,15.0,SUDA,R1,N,,2.7,0.9275,2581.3,2581.3,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+11,15.0,SUDA,R1,N,,2.7,1.4281,5969.31,5969.31,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+110,15.0,SUDA,R1,N,,2.7,2.0706,12997.65,12997.65,0.2706,2019975.73,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+111,15.0,SUDA,R1,N,,2.7,0.9056,2652.8,2652.8,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+112,15.0,SUDA,R1,N,,2.7,1.864,10811.0,10811.0,0.064,441409.87,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+113,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (ROAD; placement_fail(5)
+114,15.0,SUDA,R1,N,,2.7,1.9056,13579.66,13579.66,0.1056,894889.3,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+115,15.0,SUDA,R1,N,,2.7,0.4218,806.34,806.34,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+116,15.0,SUDA,R1,N,,2.7,1.9504,11713.55,11713.55,0.1504,1074146.96,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+117,18.0,SUDA,R1,N,,2.7,1.3641,5602.47,5602.47,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+118,15.0,SUDA,R1,N,,2.7,2.3587,22047.3,22047.3,0.5587,6210160.49,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+119,15.0,SUDA,R1,N,,2.7,1.5382,7172.5,7172.5,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+12,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(4/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 2 (REAR; placement_fail(6)
+120,15.0,SUDA,R1,N,,2.7,0.8811,2183.82,2183.82,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+121,15.0,SUDA,R1,N,,2.7,1.7922,9373.02,9373.02,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+122,18.0,SUDA,R1,N,,2.7,1.0622,3667.83,3667.83,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+123,15.0,SUDA,R1,N,,2.7,1.2766,7824.34,7824.34,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+124,15.0,SUDA,R1,N,,2.7,0.6741,4956.56,4956.56,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+125,15.0,SUDA,R1,N,,2.7,1.8102,9495.85,9495.85,0.0102,63627.08,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+126,15.0,SUDA,R1,N,,2.7,2.4202,23254.69,23254.69,0.6202,7086370.95,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+127,15.0,SUDA,R1,N,,2.7,1.8617,48456.54,48456.54,0.0617,1909699.37,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+128,15.0,SUDA,R1,N,,2.7,0.9386,3135.9,3135.9,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+129,15.0,SUDA,R1,N,,2.7,1.9705,14806.68,14806.68,0.1705,1523505.91,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+13,15.0,SUDA,R1,N,,2.7,1.1212,6061.29,6061.29,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+130,15.0,SUDA,R1,N,,2.7,1.7386,12927.89,12927.89,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+131,15.0,SUDA,R1,N,,2.7,2.4753,43784.2,43784.2,0.6753,14204552.7,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+132,15.0,SUDA,R1,N,,2.7,2.18,35039.47,35039.47,0.38,7263228.65,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+133,60.0,SUDA,R1,Y,0.0,4.0,3.9149,155013.85,155013.85,2.1149,99580511.71,PASS,PASS,PASS,PASS,PASS,PASS,distance_check_200.0m;authority_zone_legal_gating_applied,PASS,,
+134,15.0,SUDA,R1,N,,2.7,2.5204,43048.76,43048.76,0.7204,14631759.44,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+137,,,,,,,,,,,,,,,,,,,SKIPPED,missing_road_width,
+139,15.0,SUDA,R1,N,,2.7,1.9906,12137.32,12137.32,0.1906,1382000.23,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+14,15.0,SUDA,R1,N,,2.7,1.0807,4529.87,4529.87,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+140,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (ROAD; placement_fail(5)
+141,18.0,SUDA,R1,N,,2.7,2.3855,22700.11,22700.11,0.5855,6625448.04,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+142,15.0,SUDA,R1,N,,2.7,1.0697,4769.33,4769.33,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+143,15.0,SUDA,R1,N,,2.7,1.2711,5266.54,5266.54,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+144,15.0,SUDA,R1,N,,2.7,1.3139,7699.77,7699.77,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+145,15.0,SUDA,R1,N,,2.7,1.6344,9512.98,9512.98,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+146,15.0,SUDA,R1,N,,2.7,1.8554,15300.61,15300.61,0.0554,543288.73,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+147,15.0,SUDA,R1,N,,2.7,0.9748,2834.63,2834.63,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+148,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (ROAD; placement_fail(5)
+149,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 2 (SIDE
+15,12.0,SUDA,R1,N,,2.7,0.5672,2800.27,2800.27,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+150,15.0,SUDA,R1,N,,2.7,1.6335,14165.93,14165.93,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+151,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (ROAD; placement_fail(5)
+152,15.0,SUDA,R1,N,,2.7,0.4292,2867.65,2867.65,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+153,15.0,SUDA,R1,N,,2.7,0.9775,6000.15,6000.15,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+154,,,,,,,,,,,,,,,,,,,SKIPPED,missing_road_width,
+155,15.0,SUDA,R1,N,,2.7,1.1677,6992.83,6992.83,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+156,15.0,SUDA,R1,N,,2.7,0.3078,2041.79,2041.79,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+157,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 4 (ROAD; placement_fail(5)
+158,15.0,SUDA,R1,N,,2.7,1.7412,9397.92,9397.92,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+159,15.0,SUDA,R1,N,,2.7,0.8234,2619.65,2619.65,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+16,12.0,SUDA,R1,N,,2.7,0.7685,6375.46,6375.46,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+160,15.0,SUDA,R1,N,,2.7,1.0113,2999.13,2999.13,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+160/1,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 2 (SIDE; placement_fail(2)
+162,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 4 (ROAD
+163,15.0,SUDA,R1,N,,2.7,0.5855,1205.0,1205.0,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+164,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (ROAD
+165,15.0,SUDA,R1,N,,2.7,1.3825,5702.6,5702.6,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+166,15.0,SUDA,R1,N,,2.7,0.9532,2935.32,2935.32,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+167,15.0,SUDA,R1,N,,2.7,1.889,14819.39,14819.39,0.089,830306.81,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+168,15.0,SUDA,R1,N,,2.7,1.1316,3410.73,3410.73,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+169,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 2 (SIDE
+17,18.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (ROAD
+170,15.0,SUDA,R1,N,,2.7,0.5993,1084.77,1084.77,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+171,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (SIDE
+172,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 2 (SIDE; layout_fail(5)
+173,15.0,SUDA,R1,N,,2.7,2.2106,21878.58,21878.58,0.4106,4832563.59,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+174,15.0,SUDA,R1,N,,2.7,1.368,7070.89,7070.89,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+175,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (ROAD
+176,12.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,"envelope_collapse_all_floors(5/5): floors=5(h=15.0m):Envelope collapsed after applying 3.00 m (9.8425 DXF ft) margin on edge 7 (ROAD,"
+177,15.0,SUDA,R1,N,,2.7,1.4311,6649.61,6649.61,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+178,12.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,"envelope_collapse_all_floors(5/5): floors=5(h=15.0m):Envelope collapsed after applying 3.00 m (9.8425 DXF ft) margin on edge 5 (ROAD,"
+179,15.0,SUDA,R1,N,,2.7,2.0664,12726.6,12726.6,0.2664,1951058.15,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+18,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 0 (ROAD
+180,,,,,,,,,,,,,,,,,,,SKIPPED,missing_road_width,
+181,12.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,"envelope_collapse_all_floors(5/5): floors=5(h=15.0m):Envelope collapsed after applying 3.00 m (9.8425 DXF ft) margin on edge 5 (ROAD,"
+19,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (SIDE
+2,12.0,SUDA,R1,N,,2.7,0.6354,2388.87,2388.87,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+20,12.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(5/5): floors=5(h=15.0m):Resulting envelope area 24.9 sq.ft is below the minimum buildable threshold of 2
+21,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 4 (ROAD; placement_fail(5)
+22,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 6 (ROAD; placement_fail(5)
+23,18.0,SUDA,R1,N,,2.7,2.2376,27151.78,27151.78,0.4376,6314464.31,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+24,15.0,SUDA,R1,N,,2.7,1.5503,7178.15,7178.15,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+25,15.0,SUDA,R1,N,,2.7,0.961,3343.8,3343.8,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+26,18.0,SUDA,R1,N,,2.7,0.8431,3443.84,3443.84,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+27,18.0,SUDA,R1,N,,2.7,1.2538,6166.19,6166.19,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+28,15.0,SUDA,R1,N,,2.7,1.1185,4448.32,4448.32,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+29,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 4 (ROAD; placement_fail(5)
+3,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 1 (SIDE
+31,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 2 (SIDE
+32,15.0,SUDA,R1,N,,2.7,0.6565,3406.62,3406.62,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+33,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 1 (SIDE
+34,15.0,SUDA,R1,N,,2.7,0.0372,607.55,607.55,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+35,12.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,placement_fail(2/5): floors=5(h=15.0m):NO_FIT; layout_fail(3)
+36,18.0,SUDA,R1,N,,2.7,0.3127,2409.54,2409.54,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+37,15.0,SUDA,R1,N,,2.7,1.3924,7182.14,7182.14,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+38,15.0,SUDA,R1,N,,2.7,0.9242,2522.67,2522.67,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+39,15.0,SUDA,R1,N,,2.7,1.2577,5275.48,5275.48,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+4,15.0,SUDA,R1,N,,2.7,0.5631,2530.57,2530.57,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+40,15.0,SUDA,R1,N,,2.7,0.0896,535.01,535.01,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+41,15.0,SUDA,R1,N,,2.7,1.037,2957.86,2957.86,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+42,15.0,SUDA,R1,N,,2.7,2.1681,20485.08,20485.08,0.3681,4135938.09,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+43,12.0,SUDA,R1,N,,2.7,1.3,29500.11,29500.11,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+44,15.0,SUDA,R1,N,,2.7,1.8758,13780.9,13780.9,0.0758,662217.09,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+46,15.0,SUDA,R1,N,,2.7,0.2952,1003.54,1003.54,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+47,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 5 (SIDE; placement_fail(5)
+48,12.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,placement_fail_all_floors(5/5): floors=5(h=15.0m):NO_FIT
+49,12.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,layout_fail(5 configs)
+5,15.0,SUDA,R1,N,,2.7,0.5086,1168.57,1168.57,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+50,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (ROAD; placement_fail(5)
+51,15.0,SUDA,R1,N,,2.7,0.9321,2393.81,2393.81,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+52,15.0,SUDA,R1,N,,2.7,0.9178,2975.0,2975.0,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+53,24.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(15/15): floors=15(h=45.0m):Envelope collapsed after applying 9.00 m (29.5276 DXF ft) margin on edge 3 (ROAD
+54,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 2 (ROAD; placement_fail(5)
+55,30.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(15/15): floors=15(h=45.0m):Envelope collapsed after applying 9.00 m (29.5276 DXF ft) margin on edge 2 (ROAD
+56,15.0,SUDA,R1,N,,2.7,0.9652,2878.17,2878.17,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+57,15.0,SUDA,R1,N,,2.7,2.1255,19770.71,19770.71,0.3255,3600471.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+58,15.0,SUDA,R1,N,,2.7,1.0324,5340.39,5340.39,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+59,15.0,SUDA,R1,N,,2.7,0.7426,1906.59,1906.59,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+6,15.0,SUDA,R1,N,,2.7,0.8171,2093.42,2093.42,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+60,15.0,SUDA,R1,N,,2.7,0.4397,844.13,844.13,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+61,15.0,SUDA,R1,N,,2.7,1.8183,14845.23,14845.23,0.0183,177669.85,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+62,15.0,SUDA,R1,N,,2.7,0.9928,3739.93,3739.93,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+63,15.0,SUDA,R1,N,,2.7,0.7931,1711.68,1711.68,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+64,18.0,SUDA,R1,N,,2.7,0.8685,2916.67,2916.67,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+65,15.0,SUDA,R1,N,,2.7,1.7278,14224.53,14224.53,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+66,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 4 (REAR; placement_fail(5)
+67,24.0,SUDA,R1,N,,2.7,0.5272,1911.34,1911.34,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+68,15.0,SUDA,R1,N,,2.7,1.1608,4353.02,4353.02,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+69,15.0,SUDA,R1,N,,2.7,0.9811,2527.47,2527.47,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+7,15.0,SUDA,R1,N,,2.7,0.6788,1840.89,1840.89,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+70,15.0,SUDA,R1,N,,2.7,0.9246,3256.82,3256.82,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+71,12.0,SUDA,R1,N,,2.7,0.9556,4708.98,4708.98,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+72,15.0,SUDA,R1,N,,2.7,0.949,2760.33,2760.33,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+73,15.0,SUDA,R1,N,,2.7,0.6697,2616.64,2616.64,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+74,15.0,SUDA,R1,N,,2.7,1.0022,4290.11,4290.11,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+75,15.0,SUDA,R1,N,,2.7,0.2226,737.98,737.98,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+76,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(5/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 10 (ROA; placement_fail(5)
+77,15.0,SUDA,R1,N,,2.7,1.3502,5276.27,5276.27,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+78,15.0,SUDA,R1,N,,2.7,1.1962,4073.16,4073.16,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+79,15.0,SUDA,R1,N,,2.7,0.5786,11235.94,11235.94,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+8,12.0,SUDA,R1,N,,2.7,1.2679,7869.09,7869.09,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+80,15.0,SUDA,R1,N,,2.7,1.0866,3771.11,3771.11,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+81,15.0,SUDA,R1,N,,2.7,1.7549,9151.74,9151.74,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+82,15.0,SUDA,R1,N,,2.7,2.0514,12083.46,12083.46,0.2514,1760919.24,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+83,15.0,SUDA,R1,N,,2.7,1.1476,4227.78,4227.78,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+84,15.0,SUDA,R1,N,,2.7,1.1223,3897.63,3897.63,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+85,15.0,SUDA,R1,N,,2.7,1.2122,4466.75,4466.75,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+86,15.0,SUDA,R1,N,,2.7,1.1843,5338.59,5338.59,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+87,15.0,SUDA,R1,N,,2.7,0.9613,3515.66,3515.66,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+88,18.0,SUDA,R1,N,,2.7,1.5752,16030.73,16030.73,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+89,15.0,SUDA,R1,N,,2.7,0.8269,3040.16,3040.16,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+9,15.0,SUDA,R1,N,,2.7,1.4907,7247.73,7247.73,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+90,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 0 (ROAD
+91,15.0,SUDA,R1,N,,2.7,0.6886,3259.61,3259.61,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+92,15.0,SUDA,R1,N,,2.7,0.9269,2690.22,2690.22,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+93,15.0,SUDA,R1,N,,2.7,0.9266,2709.02,2709.02,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+94/1,15.0,SUDA,R1,N,,2.7,1.558,7196.63,7196.63,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+94/2,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 3 (SIDE
+95,12.0,SUDA,R1,N,,2.7,0.8912,2088.23,2088.23,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+96,30.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_fail(10/15): floors=15(h=45.0m):Envelope collapsed after applying 9.00 m (29.5276 DXF ft) margin on edge 10 (ROA; placement_fail(5)
+97,15.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,FAIL,end_to_end_feasible,envelope_collapse_all_floors(10/10): floors=10(h=30.0m):Envelope collapsed after applying 6.00 m (19.6850 DXF ft) margin on edge 2 (REAR
+98,15.0,SUDA,R1,N,,2.7,1.2094,6428.67,6428.67,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,
+99,18.0,SUDA,R1,N,,2.7,0.5984,1475.0,1475.0,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,PASS,,

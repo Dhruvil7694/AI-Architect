@@ -5,28 +5,22 @@ Shared constants and typed exceptions for the geometry pipeline.
 
 Unit contract
 -------------
-Plot.geom is stored in SRID=0 DXF coordinate units.  Based on the PAL TP14
-ingestion the DXF drawing unit is FEET (areas match sq.ft from the Excel
-metadata with no conversion).
+Plot.geom is in SRID=0 **metre-based** DXF coordinates (1 DXF unit = 1 m), matching
+PAL/SUDA TP drawings and ``common.units.DXF_TO_METRES``.
 
-All GDCR margin values are in METRES.  Every geometry operation that applies
-a margin must convert:
+All GDCR margin values are in METRES. Every geometry operation applies:
     margin_dxf = margin_metres * METRES_TO_DXF
-
-If a future scheme is confirmed to use a different unit, swap the constant
-here and nothing else needs to change.
 """
 
 from __future__ import annotations
 
-# ── Unit conversion ───────────────────────────────────────────────────────────
-DXF_UNIT: str = "feet"
-METRES_TO_DXF: float = 1.0 / 0.3048   # 3.28084  feet per metre
-DXF_TO_METRES: float = 0.3048         # metres per DXF foot
+from common.units import DXF_TO_METRES, METRES_TO_DXF
 
-# Minimum envelope area (sq.ft in DXF units) below which we declare TOO_SMALL.
-# ~20 sq.m converted to sq.ft as a sane lower bound for any habitable footprint.
-MIN_BUILDABLE_AREA_SQFT: float = 215.0   # ≈ 20 sq.m
+# ── Unit conversion (single source: common.units) ────────────────────────────
+DXF_UNIT: str = "metres"
+
+# Minimum envelope polygon area in DXF plane units² (m² when using metre DXF).
+MIN_BUILDABLE_AREA_SQFT: float = 20.0  # ≈ 215 sq.ft — habitable footprint floor
 
 
 # ── Typed exceptions ──────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ from architecture.feasibility.plot_metrics import (
     _height_band_for_height,
     compute_plot_metrics,
 )
-from common.units import dxf_to_metres, sqft_to_sqm
+from common.units import dxf_plane_area_to_sqm, dxf_to_metres, sqm_to_sqft
 
 
 class TestPlotMetricsHelpers(TestCase):
@@ -75,11 +75,11 @@ class TestPlotMetricsHelpers(TestCase):
 
 class TestComputePlotMetricsEndToEnd(TestCase):
     def test_compute_plot_metrics_happy_path(self):
-        # Square 0,0 to 10,10 in DXF feet
+        # Square 0,0 to 10,10 in DXF plane units (metres): area = 100 m²
         poly = Polygon([(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)])
         wkt = poly.wkt
-        area_sqft = float(poly.area)  # in sq.ft (DXF)
-        area_sqm = sqft_to_sqm(area_sqft)
+        area_sqm = dxf_plane_area_to_sqm(float(poly.area))
+        area_intl_sqft = sqm_to_sqft(area_sqm)
 
         edge_audit = [
             {"edge_type": "ROAD", "length_dxf": 10.0, "p1": [0.0, 0.0], "p2": [10.0, 0.0]},
@@ -90,17 +90,17 @@ class TestComputePlotMetricsEndToEnd(TestCase):
 
         metrics = compute_plot_metrics(
             plot_geom_wkt=wkt,
-            plot_area_sqft=area_sqft,
+            plot_area_sqft=area_intl_sqft,
             plot_area_sqm=area_sqm,
             edge_margin_audit=edge_audit,
             building_height_m=16.5,
         )
 
         self.assertIsInstance(metrics, PlotMetrics)
-        self.assertAlmostEqual(metrics.plot_area_sqft, area_sqft, places=6)
+        self.assertAlmostEqual(metrics.plot_area_sqft, area_intl_sqft, places=3)
         self.assertAlmostEqual(metrics.plot_area_sqm, area_sqm, places=6)
 
-        # Frontage and depth both 10 ft in DXF
+        # Frontage and depth both 10 m in DXF
         self.assertAlmostEqual(metrics.frontage_length_m, dxf_to_metres(10.0), places=6)
         self.assertAlmostEqual(metrics.plot_depth_m, dxf_to_metres(10.0), places=6)
         self.assertEqual(metrics.n_road_edges, 1)

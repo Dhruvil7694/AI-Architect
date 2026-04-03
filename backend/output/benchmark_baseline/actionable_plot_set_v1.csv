@@ -1,0 +1,5 @@
+tp_scheme,fp_number,selection_class,cohort_label,rationale
+TP14,23,CONTROL_PASS,large_thin,Pipeline pass; used as regression control.
+TP14,34,CONTROL_PASS,irregular_large,Pipeline pass; used as regression control.
+TP14,84,CONTROL_PASS,thin_high_aspect,Pipeline pass; used as regression control.
+TP14,181,ACTIONABLE,irregular_extreme,Large plot still fails envelope; likely geometry/heuristic artifact candidate.

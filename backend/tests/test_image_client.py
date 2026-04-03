@@ -7,7 +7,7 @@ class TestGenerateImage(unittest.TestCase):
     """Test generate_image function."""
 
     @patch("ai_layer.image_client.openai")
-    @patch("ai_layer.image_client.get_ai_config")
+    @patch("ai_layer.config.get_ai_config")
     def test_returns_base64_on_success(self, mock_config, mock_openai):
         mock_config.return_value.api_key = "sk-test"
         mock_config.return_value.dalle_timeout_s = 30.0
@@ -22,7 +22,7 @@ class TestGenerateImage(unittest.TestCase):
         mock_openai.OpenAI.return_value.images.generate.assert_called_once()
 
     @patch("ai_layer.image_client.openai")
-    @patch("ai_layer.image_client.get_ai_config")
+    @patch("ai_layer.config.get_ai_config")
     def test_returns_none_on_api_error(self, mock_config, mock_openai):
         mock_config.return_value.api_key = "sk-test"
         mock_config.return_value.dalle_timeout_s = 30.0
@@ -33,7 +33,7 @@ class TestGenerateImage(unittest.TestCase):
 
         assert result is None
 
-    @patch("ai_layer.image_client.get_ai_config")
+    @patch("ai_layer.config.get_ai_config")
     def test_returns_none_when_no_api_key(self, mock_config):
         mock_config.return_value.api_key = None
 
@@ -43,7 +43,7 @@ class TestGenerateImage(unittest.TestCase):
         assert result is None
 
     @patch("ai_layer.image_client.openai")
-    @patch("ai_layer.image_client.get_ai_config")
+    @patch("ai_layer.config.get_ai_config")
     def test_returns_none_on_empty_response(self, mock_config, mock_openai):
         mock_config.return_value.api_key = "sk-test"
         mock_config.return_value.dalle_timeout_s = 30.0

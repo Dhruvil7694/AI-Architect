@@ -22,7 +22,7 @@ import logging
 from django.contrib.gis.geos import GEOSGeometry
 
 from tp_ingestion.models import Plot
-from common.units import dxf_to_metres
+from common.units import dxf_to_metres, dxf_plane_area_to_sqm, sqm_to_sqft
 
 from envelope_engine.services.envelope_service import compute_envelope
 from placement_engine.services.placement_service import compute_placement
@@ -144,7 +144,9 @@ def _is_feasible_height(
 
     # Footprint and buildability metrics
     fp = placement.footprints[0]
-    footprint_area_sqft = fp.area_sqft
+    footprint_area_sqft = sqm_to_sqft(
+        dxf_plane_area_to_sqm(float(fp.area_sqft or 0.0))
+    )
     if footprint_area_sqft <= 0.0 or plot_area_sqft <= 0.0:
         return False, None
 
@@ -186,7 +188,9 @@ def _is_feasible_height(
     floors = min(floors_by_height, max_floors_fsi)
 
     # Compute regulatory metrics once for this candidate (FSI, GC, spacing)
-    cop_provided_sqft = env.common_plot_area_sqft or 0.0
+    cop_provided_sqft = sqm_to_sqft(
+        dxf_plane_area_to_sqm(float(env.common_plot_area_sqft or 0.0))
+    )
     regulatory = build_regulatory_metrics(
         plot_area_sqft=plot_area_sqft,
         total_bua_sqft=buildability.footprint_area_sqft * floors,

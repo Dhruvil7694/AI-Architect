@@ -1,4 +1,6 @@
 export { PlotLayer } from "./PlotLayer";
+export { PlotDimLayer } from "./PlotDimLayer";
+export { SetbackBandsLayer } from "./SetbackBandsLayer";
 export { SetbackLayer } from "./SetbackLayer";
 export { EnvelopeLayer } from "./EnvelopeLayer";
 export { CopLayer } from "./CopLayer";

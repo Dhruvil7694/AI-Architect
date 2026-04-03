@@ -172,6 +172,31 @@ This document lists **all parameters computed by the layout engines** that are m
 
 So: **math and thresholds used in envelope, placement, core fit, and feasibility are GDCR/NBC-aligned**; **full clause-by-clause compliance** is available via the rules engine and `check_compliance`, not automatically in the main floor plan command.
 
+### 2.4 Config Values Snapshot (from YAML)
+
+- GDCR values in `GDCR.yaml`:
+  - `access_rules.minimum_road_width_for_dw3 = 9 m` (below this, DW3 not allowed and height capped at 10 m)
+  - `fsi_rules.base_fsi = 1.8`; premium resulting caps = `2.7`, `3.6`, `4.0`
+  - `height_rules.road_width_height_map` = 9->10 m, 12->16.5 m, 18->30 m, 36->45 m, >36->70 m
+  - `road_side_margin.height_formula = H/5` with road-width table minimums; `side_rear_margin` bands = 3/4/6/8 m
+  - `ground_coverage.max_percentage_dw3 = 40`
+  - `common_open_plot.required_fraction = 0.10` and `minimum_total_area_sqm = 200`
+  - `lift_requirement.if_height_above = 10 m`; `fire_safety.fire_noc_required_if_height_above = 15 m`; `fire_safety.refuge_area_if_height_above = 25 m`
+
+- NBC values in `NBC.yaml`:
+  - `building_classification.high_rise.threshold_height_m = 15`
+  - `egress.minimum_number_of_exits.residential = 2`
+  - `egress.travel_distance.max_distance_m = 30 (sprinklered), 22.5 (non-sprinklered)`
+  - `egress.corridor_width.minimum_m = 1.0`
+  - `egress.staircase.minimum_width_m = 1.0 (low-rise), 1.5 (high-rise)`; `minimum_tread_mm = 250`; `maximum_riser_mm = 190`; `minimum_headroom_m = 2.2`
+  - `egress.door.minimum_width_m = 0.9` with opening in direction of egress
+  - `high_rise_requirements.firefighting_shaft.required_above_height_m = 15` with `120` min fire rating
+  - `high_rise_requirements.fire_lift.required_above_height_m = 15`
+  - `high_rise_requirements.refuge_area.required_above_height_m = 60` with `minimum_area_percent_of_floor = 4`
+  - `fire_separation.minimum_separation_distance_m = 6`
+  - Structural/compartmentation fire ratings are set to `120` minutes
+  - `validation_mode.enforcement = validation_only`, `generation = false`
+
 ---
 
 ## 3. Real Buildable Plot Test (TP14 FP126)

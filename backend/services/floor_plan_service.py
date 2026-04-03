@@ -80,6 +80,24 @@ BALCONY_ENABLED = True   # set False to suppress balconies
 # Ventilation (§13.1.11): window area ≥ 1/6 of floor area of the served room.
 VENTILATION_WINDOW_RATIO = 1.0 / 6.0   # window ≥ floor_area / 6
 
+# ─── Room subdivision tables (metres) ────────────────────────────────────────
+# Each unit type defines: back_strip_depth, bedroom_depth, toilet_w, kitchen_w
+# Slicing order: back strip (TOILET+KITCHEN) → middle (BEDROOM) → front (LIVING)
+_ROOM_CONFIG: Dict[str, Dict[str, float]] = {
+    "STUDIO": {"back_depth": 2.0, "bedroom_depth": 0.0, "toilet_w_frac": 1.0, "kitchen_w_frac": 0.0},
+    "1RK":    {"back_depth": 2.0, "bedroom_depth": 0.0, "toilet_w_frac": 1.0, "kitchen_w_frac": 0.0},
+    "1BHK":   {"back_depth": 2.0, "bedroom_depth": 3.0, "toilet_w_frac": 0.40, "kitchen_w_frac": 0.60},
+    "2BHK":   {"back_depth": 2.2, "bedroom_depth": 3.2, "toilet_w_frac": 0.38, "kitchen_w_frac": 0.62},
+    "3BHK":   {"back_depth": 2.3, "bedroom_depth": 3.4, "toilet_w_frac": 0.35, "kitchen_w_frac": 0.65},
+    "4BHK":   {"back_depth": 2.5, "bedroom_depth": 3.6, "toilet_w_frac": 0.33, "kitchen_w_frac": 0.67},
+}
+
+# Room fill colours for frontend legend (emitted in properties)
+_ROOM_LABEL: Dict[str, str] = {
+    "LIVING": "Living", "BEDROOM": "Bedroom", "KITCHEN": "Kitchen",
+    "TOILET": "Toilet", "PASSAGE": "Passage",
+}
+
 
 # ─── GDCR helpers ─────────────────────────────────────────────────────────────
 
@@ -330,6 +348,332 @@ def _ventilation_check(
     }
 
 
+# ─── Detailed unit subdivision — walls, doors, windows ────────────────────────
+
+# Architectural constants (metres)
+EXT_WALL_T   = 0.230   # 230 mm external / party wall
+INT_WALL_T   = 0.115   # 115 mm internal partition
+DOOR_MAIN_W  = 0.900   # main entry door
+DOOR_ROOM_W  = 0.800   # bedroom / kitchen door
+DOOR_BATH_W  = 0.750   # bathroom door
+WINDOW_DEPTH = 0.100   # window thickness in plan (visual only)
+
+
+def _local_polygon(
+    pts: List[Tuple[float, float]],
+    origin: Tuple[float, float],
+    l_dxf: Tuple[float, float],
+    s_dxf: Tuple[float, float],
+) -> Dict:
+    """Convert a list of (L, S) local-metre points to a DXF GeoJSON Polygon."""
+    ox, oy = origin
+    lx, ly = l_dxf
+    sx, sy = s_dxf
+    coords = [[ox + l * lx + s * sx, oy + l * ly + s * sy] for l, s in pts]
+    if coords and coords[0] != coords[-1]:
+        coords.append(coords[0])
+    return {"type": "Polygon", "coordinates": [coords]}
+
+
+def _door_arc_pts(
+    hl: float, hs: float, w: float,
+    dl: float, ds: float, n: int = 12,
+) -> List[Tuple[float, float]]:
+    """Quarter-circle arc polygon in local metres for a door swing.
+
+    hl, hs : hinge point (local L, S)
+    w      : door width (arc radius)
+    dl, ds : direction multipliers for the sweep
+             e.g. dl=1,ds=-1 sweeps from +L into -S
+    """
+    pts: List[Tuple[float, float]] = [(hl, hs)]
+    for i in range(n + 1):
+        theta = math.pi / 2.0 * i / n
+        pts.append((
+            hl + w * math.cos(theta) * dl,
+            hs + w * math.sin(theta) * ds,
+        ))
+    pts.append((hl, hs))
+    return pts
+
+
+def _generate_unit_detail(
+    l0: float, s0: float, l1: float, s1: float,
+    unit_type: str,
+    core_side: str,
+    unit_id: str,
+    origin: Tuple[float, float],
+    l_dxf: Tuple[float, float],
+    s_dxf: Tuple[float, float],
+) -> List[Dict]:
+    """
+    Generate complete architectural detail for one residential unit:
+    rooms (inset from walls), thick wall polygons, doors with arcs, windows.
+
+    core_side : "south" → entry at s0 (corridor at bottom of unit)
+                "north" → entry at s1 (corridor at top of unit)
+
+    Returns a list of GeoJSON Feature dicts ready for the FeatureCollection.
+    """
+    features: List[Dict] = []
+    W = l1 - l0
+    D = s1 - s0
+
+    cfg = _ROOM_CONFIG.get(unit_type, _ROOM_CONFIG["2BHK"])
+    back_depth = cfg["back_depth"]
+    bed_depth  = cfg["bedroom_depth"]
+    toilet_frac = cfg["toilet_w_frac"]
+
+    e = EXT_WALL_T
+    p = INT_WALL_T
+    seq = [0]  # mutable counter for unique IDs
+
+    def R(rl0: float, rs0: float, rl1: float, rs1: float) -> Dict:
+        return _rect(rl0, rs0, rl1, rs1, origin, l_dxf, s_dxf)
+
+    def P(pts: List[Tuple[float, float]]) -> Dict:
+        return _local_polygon(pts, origin, l_dxf, s_dxf)
+
+    def add_room(room_type: str, rl0: float, rs0: float, rl1: float, rs1: float) -> None:
+        area = (rl1 - rl0) * (rs1 - rs0)
+        seq[0] += 1
+        features.append({
+            "type": "Feature",
+            "id": f"room_{unit_id}_{room_type.lower()}_{seq[0]}",
+            "geometry": R(rl0, rs0, rl1, rs1),
+            "properties": {
+                "layer": "room",
+                "room_type": room_type,
+                "unit_id": unit_id,
+                "area_sqm": round(area, 2),
+                "label": _ROOM_LABEL.get(room_type, room_type),
+            },
+        })
+
+    def add_wall(wl0: float, ws0: float, wl1: float, ws1: float, wtype: str = "external") -> None:
+        seq[0] += 1
+        features.append({
+            "type": "Feature",
+            "id": f"wall_{unit_id}_{seq[0]}",
+            "geometry": R(wl0, ws0, wl1, ws1),
+            "properties": {"layer": "wall", "wall_type": wtype},
+        })
+
+    def add_door(hl: float, hs: float, w: float, dl: float, ds: float) -> None:
+        arc = _door_arc_pts(hl, hs, w, dl, ds)
+        seq[0] += 1
+        features.append({
+            "type": "Feature",
+            "id": f"door_{unit_id}_{seq[0]}",
+            "geometry": P(arc),
+            "properties": {"layer": "door", "width_m": w},
+        })
+
+    def add_window(wl0: float, ws0: float, wl1: float, ws1: float) -> None:
+        seq[0] += 1
+        features.append({
+            "type": "Feature",
+            "id": f"window_{unit_id}_{seq[0]}",
+            "geometry": R(wl0, ws0, wl1, ws1),
+            "properties": {"layer": "window", "width_m": round(max(wl1 - wl0, ws1 - ws0), 2)},
+        })
+
+    # ── Interior bounds after external walls ─────────────────────────────
+    # Three sides get external walls; the corridor-facing side gets a thin entry wall.
+    il0 = l0 + e          # left
+    il1 = l1 - e          # right
+    iW  = il1 - il0
+
+    if core_side == "north":
+        # Entry at s1 (top), outer wall at s0 (bottom)
+        is0 = s0 + e      # inner face of outer wall
+        is1 = s1 - p      # inner face of entry wall
+    else:
+        # Entry at s0 (bottom), outer wall at s1 (top)
+        is0 = s0 + p      # inner face of entry wall
+        is1 = s1 - e      # inner face of outer wall
+
+    iD = is1 - is0
+
+    # ── Scale room depths to fit interior ────────────────────────────────
+    n_part = (2 if bed_depth > 0 else 1) if back_depth > 0 else 0
+    part_total = n_part * p
+    avail = iD - part_total
+    total_back_bed = back_depth + bed_depth
+
+    if total_back_bed > 0 and total_back_bed > avail * 0.70:
+        scale = avail * 0.70 / total_back_bed
+        back_depth *= scale
+        bed_depth  *= scale
+
+    living_depth = avail - back_depth - bed_depth
+    if living_depth < 1.5:
+        living_depth = avail
+        back_depth = 0.0
+        bed_depth  = 0.0
+
+    # ── Compute S-positions per room band ────────────────────────────────
+    # Direction: from entry toward outer wall.
+    if core_side == "north":
+        # Entry at top (is1), outer at bottom (is0)
+        # Living (entry side) → Bedroom → Back strip (outer side)
+        s_liv_1  = is1                        # living top
+        s_liv_0  = is1 - living_depth         # living bottom
+
+        s_wlb_0  = s_liv_0 - p               # wall living/bedroom
+        s_wlb_1  = s_liv_0
+
+        s_bed_1  = s_wlb_0                    # bedroom top
+        s_bed_0  = s_wlb_0 - bed_depth if bed_depth > 0.3 else s_wlb_0
+
+        s_wbb_0  = s_bed_0 - p if bed_depth > 0.3 else s_wlb_0 - p
+        s_wbb_1  = s_bed_0 if bed_depth > 0.3 else s_wlb_0
+
+        s_bck_1  = s_wbb_0                   # back-strip top
+        s_bck_0  = is0                        # back-strip bottom (at outer wall)
+    else:
+        # Entry at bottom (is0), outer at top (is1)
+        s_liv_0  = is0
+        s_liv_1  = is0 + living_depth
+
+        s_wlb_0  = s_liv_1
+        s_wlb_1  = s_liv_1 + p
+
+        s_bed_0  = s_wlb_1
+        s_bed_1  = s_wlb_1 + bed_depth if bed_depth > 0.3 else s_wlb_1
+
+        s_wbb_0  = s_bed_1 if bed_depth > 0.3 else s_wlb_1
+        s_wbb_1  = s_bed_1 + p if bed_depth > 0.3 else s_wlb_1 + p
+
+        s_bck_0  = s_wbb_1
+        s_bck_1  = is1
+
+    # ── ROOMS ────────────────────────────────────────────────────────────
+    add_room("LIVING", il0, s_liv_0, il1, s_liv_1)
+
+    if bed_depth > 0.3:
+        if unit_type in ("3BHK", "4BHK") and iW >= 5.5:
+            mid = il0 + iW * 0.55
+            add_room("BEDROOM", il0, s_bed_0, mid - p / 2, s_bed_1)
+            add_room("BEDROOM", mid + p / 2, s_bed_0, il1, s_bed_1)
+            # Partition between bedrooms
+            add_wall(mid - p / 2, s_bed_0, mid + p / 2, s_bed_1, "internal")
+        else:
+            add_room("BEDROOM", il0, s_bed_0, il1, s_bed_1)
+
+    back_d = abs(s_bck_1 - s_bck_0)
+    if back_depth > 0.3 and back_d > 0.5:
+        toilet_w = iW * toilet_frac
+        tk_wall_l = il0 + toilet_w   # vertical wall between toilet & kitchen
+        # Toilet (left)
+        add_room("TOILET", il0, s_bck_0, tk_wall_l - p / 2, s_bck_1)
+        # Kitchen (right)
+        add_room("KITCHEN", tk_wall_l + p / 2, s_bck_0, il1, s_bck_1)
+        # Partition between toilet & kitchen
+        add_wall(tk_wall_l - p / 2, s_bck_0, tk_wall_l + p / 2, s_bck_1, "internal")
+
+    # ── THICK WALLS ──────────────────────────────────────────────────────
+    # External walls (3 sides)
+    add_wall(l0, s0, l0 + e, s1, "external")      # left
+    add_wall(l1 - e, s0, l1, s1, "external")       # right
+
+    if core_side == "north":
+        add_wall(l0, s0, l1, s0 + e, "external")   # outer (bottom)
+        # Entry wall (top) — split for door opening
+        door_center_l = (l0 + l1) / 2.0
+        dh = DOOR_MAIN_W / 2.0
+        add_wall(l0, s1 - p, door_center_l - dh, s1, "entry")
+        add_wall(door_center_l + dh, s1 - p, l1, s1, "entry")
+    else:
+        add_wall(l0, s1 - e, l1, s1, "external")   # outer (top)
+        door_center_l = (l0 + l1) / 2.0
+        dh = DOOR_MAIN_W / 2.0
+        add_wall(l0, s0, door_center_l - dh, s0 + p, "entry")
+        add_wall(door_center_l + dh, s0, l1, s0 + p, "entry")
+
+    # Internal horizontal partitions (living/bedroom, bedroom/back)
+    if bed_depth > 0.3:
+        # Door gap in living→bedroom wall (left side)
+        door_l = il0
+        add_wall(door_l + DOOR_ROOM_W, s_wlb_0, il1, s_wlb_1, "internal")
+        # Door gap in bedroom→back wall (left = toilet door, right = kitchen door)
+        if back_depth > 0.3 and back_d > 0.5:
+            # Toilet door (left)
+            td_l = il0
+            td_r = td_l + DOOR_BATH_W
+            # Kitchen door (right, near toilet/kitchen partition)
+            kd_r = il1
+            kd_l = kd_r - DOOR_ROOM_W
+            # Wall segments with door gaps
+            add_wall(td_r, s_wbb_0, kd_l, s_wbb_1, "internal")
+    elif back_depth > 0.3 and back_d > 0.5:
+        # No bedroom — wall between living and back
+        door_l = il0
+        add_wall(door_l + DOOR_ROOM_W, s_wlb_0, il1, s_wlb_1, "internal")
+
+    # ── DOORS (quarter-circle arcs) ──────────────────────────────────────
+    if core_side == "north":
+        # Main entry: hinge at right side of opening, swings inward (-S)
+        add_door(door_center_l + dh, s1, DOOR_MAIN_W, -1, -1)
+        if bed_depth > 0.3:
+            # Bedroom door: hinge left, swings into bedroom (-S)
+            add_door(il0, s_wlb_0, DOOR_ROOM_W, 1, -1)
+            if back_depth > 0.3 and back_d > 0.5:
+                # Toilet door: hinge left, swings into toilet (-S)
+                add_door(il0, s_wbb_0, DOOR_BATH_W, 1, -1)
+                # Kitchen door: hinge right, swings into kitchen (-S)
+                add_door(il1, s_wbb_0, DOOR_ROOM_W, -1, -1)
+    else:
+        # Main entry: hinge at right side, swings inward (+S)
+        add_door(door_center_l + dh, s0, DOOR_MAIN_W, -1, 1)
+        if bed_depth > 0.3:
+            add_door(il0, s_wlb_1, DOOR_ROOM_W, 1, 1)
+            if back_depth > 0.3 and back_d > 0.5:
+                add_door(il0, s_wbb_1, DOOR_BATH_W, 1, 1)
+                add_door(il1, s_wbb_1, DOOR_ROOM_W, -1, 1)
+
+    # ── WINDOWS (on external walls) ──────────────────────────────────────
+    wd = WINDOW_DEPTH
+    if core_side == "north":
+        outer_s = s0
+        # Living window — large, centered on outer wall
+        ww_liv = min(1.5, iW * 0.5)
+        wc = (il0 + il1) / 2
+        add_window(wc - ww_liv / 2, outer_s, wc + ww_liv / 2, outer_s + wd)
+        # Bedroom window — on left external wall
+        if bed_depth > 0.3:
+            ww_bed = min(1.2, (s_bed_1 - s_bed_0) * 0.5)
+            bc = (s_bed_0 + s_bed_1) / 2
+            add_window(l0, bc - ww_bed / 2, l0 + wd, bc + ww_bed / 2)
+        # Kitchen window — on outer wall (right side)
+        if back_depth > 0.3 and back_d > 0.5:
+            tk_l = il0 + iW * toilet_frac + p / 2
+            kc = (tk_l + il1) / 2
+            ww_k = min(0.9, (il1 - tk_l) * 0.5)
+            add_window(kc - ww_k / 2, outer_s, kc + ww_k / 2, outer_s + wd)
+            # Toilet window — small, on left wall
+            tc = (s_bck_0 + s_bck_1) / 2
+            add_window(l0, tc - 0.3, l0 + wd, tc + 0.3)
+    else:
+        outer_s = s1
+        ww_liv = min(1.5, iW * 0.5)
+        wc = (il0 + il1) / 2
+        add_window(wc - ww_liv / 2, outer_s - wd, wc + ww_liv / 2, outer_s)
+        if bed_depth > 0.3:
+            ww_bed = min(1.2, (s_bed_1 - s_bed_0) * 0.5)
+            bc = (s_bed_0 + s_bed_1) / 2
+            add_window(l0, bc - ww_bed / 2, l0 + wd, bc + ww_bed / 2)
+        if back_depth > 0.3 and back_d > 0.5:
+            tk_l = il0 + iW * toilet_frac + p / 2
+            kc = (tk_l + il1) / 2
+            ww_k = min(0.9, (il1 - tk_l) * 0.5)
+            add_window(kc - ww_k / 2, outer_s - wd, kc + ww_k / 2, outer_s)
+            tc = (s_bck_0 + s_bck_1) / 2
+            add_window(l0, tc - 0.3, l0 + wd, tc + 0.3)
+
+    return features
+
+
 # ─── Main function ────────────────────────────────────────────────────────────
 
 def generate_floor_plan(
@@ -390,9 +734,10 @@ def generate_floor_plan(
 
     # ── 2. GDCR core requirements ─────────────────────────────────────────────
     # Estimate total dwelling units for GDCR lift sizing (§13.12.2):
-    # avg unit ≈ 55 m², 65% floor efficiency → units/floor ≈ footprint × 0.65 / 55
-    avg_unit_sqm    = 55.0
-    est_units_floor = max(2, int(footprint_sqm * 0.65 / avg_unit_sqm))
+    # Use floor area based estimate: net usable ≈ 60% of footprint, avg unit ≈ 40 m²
+    # (conservative — accounts for mix of 1RK @ 15m² to 3BHK @ 70m²).
+    avg_unit_sqm    = 40.0
+    est_units_floor = max(2, int(footprint_sqm * 0.60 / avg_unit_sqm))
     est_total_units = est_units_floor * max(1, n_floors)
 
     n_lifts_gdcr     = _n_lifts_required(building_height_m, est_total_units)
@@ -410,24 +755,22 @@ def generate_floor_plan(
     core_gap      = 0.5 if n_lifts > 0 and n_stairs > 0 else 0.0
     core_len      = max(stair_total_L + core_gap + lift_total_L, stair_total_L, 2.5)
 
-    # ── 3. Key S-positions (all in local metres) ──────────────────────────────
-    s_mid = SHORT_m / 2.0
+    # ── 3. Key S-positions — symmetric H-plan layout ──────────────────────────
+    # Corridor: 1.8 m band centred on floor width (upgraded from 1.5 m)
+    CORRIDOR_W_USE = 1.80
+    s_mid    = SHORT_m / 2.0
+    s_corr_0 = s_mid - CORRIDOR_W_USE / 2.0   # south edge of corridor
+    s_corr_1 = s_mid + CORRIDOR_W_USE / 2.0   # north edge of corridor
 
-    # Corridor: 1.5 m band centred on floor width
-    s_corr_0 = s_mid - CORRIDOR_W / 2.0   # south edge of corridor
-    s_corr_1 = s_mid + CORRIDOR_W / 2.0   # north edge of corridor
-
-    stair_south_ext = STAIR_D / 2.0
-    core_s_start    = s_corr_0 - stair_south_ext
-
+    # Core extends symmetrically around corridor:
+    # South half: lifts + lobby (below corridor)
+    # North half: stairs (above corridor)
     if n_lifts > 0:
-        lift_s0      = s_corr_1
-        lift_s1      = s_corr_1 + LIFT_CABIN_D
-        landing_s0   = lift_s0 - LIFT_LANDING_D
-        core_s_start = min(core_s_start, landing_s0)
-        core_s_end   = lift_s1
+        core_s_start = s_corr_0 - LIFT_LANDING_D - LIFT_CABIN_D
+        core_s_end   = s_corr_1 + STAIR_D
     else:
-        core_s_end = s_corr_1 + STAIR_D - stair_south_ext
+        core_s_start = s_corr_0 - STAIR_D / 2.0
+        core_s_end   = s_corr_1 + STAIR_D / 2.0
 
     # Clamp to floor boundary
     core_s_start = max(0.2, core_s_start)
@@ -468,20 +811,28 @@ def generate_floor_plan(
     })
 
     # ── Corridor (full length) ────────────────────────────────────────────────
-    corridor_sqm = L_m * CORRIDOR_W
+    corridor_sqm = L_m * CORRIDOR_W_USE
     features.append({
         "type": "Feature", "id": "corridor",
         "geometry": R(0, s_corr_0, L_m, s_corr_1),
         "properties": {
             "layer": "corridor",
-            "label": f"Corridor  {CORRIDOR_W:.1f} m",
+            "label": f"Corridor  {CORRIDOR_W_USE:.1f} m",
             "area_sqm": round(corridor_sqm, 2),
-            "width_m": CORRIDOR_W,
+            "width_m": CORRIDOR_W_USE,
         },
     })
 
-    # ── Core block ────────────────────────────────────────────────────────────
-    core_sqm = core_len * core_S_depth
+    # ── Stair S-positions (north of corridor) ───────────────────────────────
+    stair_s0 = s_corr_1
+    stair_s1 = s_corr_1 + STAIR_D
+    stair_s1 = min(stair_s1, core_s_end)
+
+    # ── Core block (only wraps actual core elements: stair + lift + lobby) ───
+    # Actual core S-span: stairs above corridor + lifts below corridor.
+    core_s_above = stair_s1 - s_corr_1 if stair_s1 > s_corr_1 else 0
+    core_s_below = s_corr_0 - core_s_start if n_lifts > 0 else 0
+    core_sqm = core_len * (core_s_above + core_s_below)
     features.append({
         "type": "Feature", "id": "core",
         "geometry": R(l_core_start, core_s_start, l_core_end, core_s_end),
@@ -494,19 +845,19 @@ def generate_floor_plan(
         },
     })
 
-    # ── Individual staircase blocks ───────────────────────────────────────────
+    # ── Individual staircase blocks ────────────────────────────────────────
     for si in range(n_stairs):
         sx_l0 = l_stair_start + si * (STAIR_W + STAIR_WALL)
         sx_l1 = sx_l0 + STAIR_W
         features.append({
             "type": "Feature", "id": f"stair_{si + 1}",
-            "geometry": R(sx_l0, core_s_start, sx_l1, core_s_end),
+            "geometry": R(sx_l0, stair_s0, sx_l1, stair_s1),
             "properties": {
                 "layer":          "stair",
                 "index":          si + 1,
                 "label":          f"S{si + 1}",
                 "width_m":        STAIR_W,
-                "depth_m":        core_S_depth,
+                "depth_m":        round(stair_s1 - stair_s0, 2),
                 "tread_mm":       250,
                 "riser_mm":       175,
                 "compliant_width": STAIR_W >= stair_w_required,
@@ -514,13 +865,14 @@ def generate_floor_plan(
             },
         })
 
-    # ── Lift lobby / landing ──────────────────────────────────────────────────
+    # ── Lift lobby / landing (south of corridor, inside core) ────────────────
     if n_lifts > 0:
         lobby_l0  = l_lift_start
         lobby_l1  = l_lift_start + lift_total_L
-        lobby_s0  = s_corr_1 - LIFT_LANDING_D
-        lobby_s1  = s_corr_1
-        lobby_sqm = lift_total_L * LIFT_LANDING_D
+        lobby_s0  = s_corr_0 - LIFT_LANDING_D
+        lobby_s1  = s_corr_0
+        lobby_s0  = max(lobby_s0, core_s_start)
+        lobby_sqm = (lobby_l1 - lobby_l0) * (lobby_s1 - lobby_s0)
         features.append({
             "type": "Feature", "id": "lift_lobby",
             "geometry": R(lobby_l0, lobby_s0, lobby_l1, lobby_s1),
@@ -536,12 +888,13 @@ def generate_floor_plan(
             },
         })
 
-    # ── Individual lift shafts ────────────────────────────────────────────────
+    # ── Individual lift shafts (south of lobby, below corridor) ──────────────
     for li in range(n_lifts):
         lx_l0   = l_lift_start + li * LIFT_SHAFT_W
         lx_l1   = lx_l0 + LIFT_SHAFT_W
-        lx_s0   = s_corr_1
-        lx_s1   = s_corr_1 + LIFT_CABIN_D
+        lx_s0   = s_corr_0 - LIFT_LANDING_D - LIFT_CABIN_D
+        lx_s1   = s_corr_0 - LIFT_LANDING_D
+        lx_s0   = max(lx_s0, core_s_start)
         is_fire = (building_height_m > 25.0 and li == n_lifts - 1)
         features.append({
             "type": "Feature", "id": f"lift_{li + 1}",
@@ -653,6 +1006,9 @@ def generate_floor_plan(
                         "depth_m":            round(depth,      2),
                         "width_m":            round(uw_actual,  2),
                         "has_balcony":        False,
+                        # Private: local-metre bounds for room subdivision
+                        "_l0": ul0, "_s0": side["s0"],
+                        "_l1": ul1, "_s1": side["s1"],
                         **vent,
                     },
                 }
@@ -684,6 +1040,32 @@ def generate_floor_plan(
                         unit_feat["properties"]["has_balcony"] = True
                         unit_feat["properties"]["balcony_sqm"] = round(balcony_sqm, 2)
 
+    # ── 7b. Detailed unit subdivision — rooms, walls, doors, windows ────────
+    detail_features: List[Dict] = []
+
+    for u in units:
+        props = u["properties"]
+        uid = props["unit_id"]
+        utype = props["unit_type"]
+        side_name = props["side"]
+
+        ul0 = props.get("_l0", 0)
+        us0 = props.get("_s0", 0)
+        ul1 = props.get("_l1", ul0 + props["width_m"])
+        us1 = props.get("_s1", us0 + props["depth_m"])
+
+        # South units: corridor at s1 edge → core_side="north"
+        # North units: corridor at s0 edge → core_side="south"
+        core_side = "north" if side_name == "south" else "south"
+        detail_features.extend(
+            _generate_unit_detail(
+                ul0, us0, ul1, us1,
+                utype, core_side, uid,
+                origin, l_dxf_pm, s_dxf_pm,
+            )
+        )
+
+    features.extend(detail_features)
     features.extend(units)
     features.extend(balconies)
 
@@ -747,8 +1129,8 @@ def generate_floor_plan(
         "stair_riser_mm":          175,
         "stair_geometry_ok":       True,   # tread 250 > 250 min; riser 175 < 190 max
         # Corridor
-        "corridor_width_m":        CORRIDOR_W,
-        "corridor_width_ok":       CORRIDOR_W >= 1.20,
+        "corridor_width_m":        CORRIDOR_W_USE,
+        "corridor_width_ok":       CORRIDOR_W_USE >= 1.20,
         # §13.1.7 — Clearance heights
         "storey_height_m":         storey_height_m,
         "clearance_habitable_m":   CLEARANCE_HABITABLE_M,

@@ -13,7 +13,10 @@ class TestDalleConfig(unittest.TestCase):
         assert c.dalle_model == "dall-e-3"
         assert c.dalle_size == "1792x1024"
         assert c.dalle_quality == "hd"
-        assert c.dalle_timeout_s == 30.0
+        assert c.dalle_timeout_s == 120.0
+        assert c.floor_plan_image_variants == 4
+        assert c.recraft_model == "recraftv4"
+        assert c.recraft_size == "16:9"
 
     @patch.dict(os.environ, {"FLOOR_PLAN_IMAGE_ENABLED": "0"})
     def test_image_disabled_via_env(self):

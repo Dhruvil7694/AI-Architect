@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import List
+from typing import List, Optional
 
 from floor_skeleton.models import UnitZone, FloorSkeleton
 
@@ -23,6 +23,7 @@ from residential_layout.errors import (
 from residential_layout.frames import ComposerFrame, derive_unit_local_frame
 from residential_layout.models import UnitLayoutContract
 from residential_layout.templates import get_unit_template
+from ai_planner.program_generator import ProgramSpec
 
 logger = logging.getLogger("residential_layout.orchestrator")
 
@@ -87,7 +88,44 @@ def resolve_unit_layout(zone: UnitZone, frame: ComposerFrame) -> UnitLayoutContr
     failure_reasons: List[dict] = []
     band_id = frame.band_id
 
-    for i, template_name in enumerate(TEMPLATE_ORDER):
+    # Optional ProgramSpec hint threaded via frame (not part of Frame today).
+    program_spec: Optional[ProgramSpec] = getattr(frame, "program_spec", None)  # type: ignore[attr-defined]
+
+    template_order = TEMPLATE_ORDER
+    if program_spec is not None and program_spec.unit_mix:
+        # Determine dominant unit type.
+        dominant_unit = max(
+            program_spec.unit_mix.items(),
+            key=lambda kv: float(kv[1] or 0.0),
+        )[0]
+        logger.info("resolve_unit_layout: dominant_unit=%s", dominant_unit)
+        # Map dominant unit to a coarse band template family.
+        family_map = {
+            "1bhk_compact": "compact",
+            "2bhk_compact": "compact",
+            "2bhk_luxury": "medium",
+            "3bhk_luxury": "luxury",
+        }
+        family = family_map.get(dominant_unit, "compact")
+
+        if family == "compact":
+            preferred = ["COMPACT_1BHK", "STANDARD_1BHK", "STUDIO"]
+        elif family == "medium":
+            preferred = ["STANDARD_2BHK", "STANDARD_3BHK", "STANDARD_1BHK"]
+        else:  # "luxury"
+            preferred = ["STANDARD_3BHK", "STANDARD_4BHK", "STANDARD_5BHK", "STANDARD_2BHK"]
+
+        # Build a template order that starts with preferred templates then falls
+        # back to the global default order (deduplicated).
+        seen = set()
+        ordered: list[str] = []
+        for name in preferred + TEMPLATE_ORDER:
+            if name not in seen:
+                seen.add(name)
+                ordered.append(name)
+        template_order = ordered
+
+    for i, template_name in enumerate(template_order):
         template = get_unit_template(template_name)
         try:
             contract = compose_unit(zone, frame, template)
@@ -96,7 +134,7 @@ def resolve_unit_layout(zone: UnitZone, frame: ComposerFrame) -> UnitLayoutContr
         except (UnitZoneTooSmallError, LayoutCompositionError) as e:
             reason_code = getattr(e, "reason_code", "") or ""
             failure_type = _failure_type_from_exception(e)
-            next_template = TEMPLATE_ORDER[i + 1] if i + 1 < len(TEMPLATE_ORDER) else "UNRESOLVED"
+            next_template = template_order[i + 1] if i + 1 < len(template_order) else "UNRESOLVED"
 
             record = {
                 "template_tried": template_name,
@@ -118,7 +156,7 @@ def resolve_unit_layout(zone: UnitZone, frame: ComposerFrame) -> UnitLayoutContr
             continue
 
     raise UnresolvedLayoutError(
-        f"All templates exhausted for band_id={band_id}; tried {TEMPLATE_ORDER}",
+        f"All templates exhausted for band_id={band_id}; tried {template_order}",
         failure_reasons=failure_reasons,
     )
 

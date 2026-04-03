@@ -22,7 +22,7 @@ detect_road_edges_with_meta(plot_geom, road_layer_queryset)
 from __future__ import annotations
 
 import logging
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Dict, Any
 
 from django.contrib.gis.geos import GEOSGeometry, LineString, Polygon
 
@@ -120,4 +120,87 @@ def detect_road_edges(plot_geom: GEOSGeometry, road_layer_queryset) -> List[int]
     """
     edges, _ = detect_road_edges_with_meta(plot_geom, road_layer_queryset)
     return edges
+
+
+def _load_multi_road_policy() -> tuple[int, str]:
+    """
+    Read multi-road governance defaults from GDCR.yaml.
+
+    Keys:
+      access_rules.multi_road_governance.max_road_edges_considered (default 1)
+      access_rules.multi_road_governance.governing_edge_selection  (default longest_length)
+    """
+    try:
+        from rules_engine.rules.loader import get_gdcr_config
+
+        gdcr = get_gdcr_config() or {}
+        cfg = (gdcr.get("access_rules", {}) or {}).get("multi_road_governance", {}) or {}
+        max_edges = int(cfg.get("max_road_edges_considered", 1) or 1)
+        selection = str(cfg.get("governing_edge_selection", "longest_length") or "longest_length")
+        return max(1, max_edges), selection
+    except Exception:
+        return 1, "longest_length"
+
+
+def select_governing_road_edges(
+    plot_geom: GEOSGeometry,
+    candidate_road_edges: List[int],
+    *,
+    max_edges: int | None = None,
+    selection_policy: str | None = None,
+) -> tuple[List[int], Dict[str, Any]]:
+    """
+    Select governing road edges for regulatory calculations.
+
+    For plots with multiple attached roads, this keeps deterministic behavior:
+    - rank candidate road edges by geometric length (descending)
+    - retain only top-N (default from GDCR policy; typically N=1)
+    - return selected indices sorted in descending-length order
+    """
+    segments = _edge_segments(plot_geom)
+    total_edges = len(candidate_road_edges or [])
+    if not candidate_road_edges:
+        return [], {
+            "total_road_edges_detected": 0,
+            "governing_road_edges": [],
+            "selection_policy": selection_policy or "longest_length",
+            "max_road_edges_considered": max_edges or 1,
+        }
+
+    cfg_max, cfg_policy = _load_multi_road_policy()
+    keep_n = max(1, int(max_edges if max_edges is not None else cfg_max))
+    policy = (selection_policy or cfg_policy or "longest_length").strip().lower()
+
+    # Validate indices and compute lengths.
+    pairs: List[tuple[int, float]] = []
+    for idx in candidate_road_edges:
+        try:
+            i = int(idx)
+        except (TypeError, ValueError):
+            continue
+        if i < 0 or i >= len(segments):
+            continue
+        pairs.append((i, float(segments[i].length)))
+    if not pairs:
+        return [], {
+            "total_road_edges_detected": total_edges,
+            "governing_road_edges": [],
+            "selection_policy": policy,
+            "max_road_edges_considered": keep_n,
+        }
+
+    if policy == "longest_length":
+        pairs.sort(key=lambda x: x[1], reverse=True)
+    else:
+        # Unknown policy -> deterministic fallback to longest.
+        pairs.sort(key=lambda x: x[1], reverse=True)
+        policy = "longest_length"
+
+    selected = [idx for idx, _ in pairs[:keep_n]]
+    return selected, {
+        "total_road_edges_detected": total_edges,
+        "governing_road_edges": selected,
+        "selection_policy": policy,
+        "max_road_edges_considered": keep_n,
+    }
 

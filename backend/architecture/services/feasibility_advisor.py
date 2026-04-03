@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from tp_ingestion.models import Plot
+from tp_ingestion.models import Road
 
 from envelope_engine.services.envelope_service import compute_envelope
 from placement_engine.services.placement_service import compute_placement
@@ -41,7 +42,7 @@ from architecture.spatial.road_edge_detector import (
     detect_road_edges_with_meta,
     select_governing_road_edges,
 )
-from common.units import sqft_to_sqm
+from common.units import dxf_plane_area_to_sqm
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,57 @@ _NO_LIFT_ARCH_MIN_W = 4.65
 _LIFT_ARCH_MIN_W = 6.36
 _HIGHRISE_ARCH_MIN_W = 7.36
 _ARCH_MIN_DEPTH = 3.7
+
+
+def _infer_and_persist_road_width_m(plot: Plot) -> float:
+    """
+    Infer road width when missing using nearby TP road geometries.
+
+    Strategy:
+      1) Intersecting roads for same TP/city.
+      2) If none intersect, fallback to max known width in same TP/city.
+    Persists inferred width on the plot for future fast loads.
+    """
+    current = float(getattr(plot, "road_width_m", 0.0) or 0.0)
+    if current > 0.0:
+        return current
+
+    roads_qs = Road.objects.filter(
+        tp_scheme=plot.tp_scheme,
+        city=plot.city,
+        width_m__isnull=False,
+    )
+    if not roads_qs.exists():
+        return 0.0
+
+    inferred = 0.0
+    try:
+        intersecting = roads_qs.filter(geom__intersects=plot.geom)
+        if intersecting.exists():
+            inferred = float(
+                max(float(r.width_m or 0.0) for r in intersecting if (r.width_m or 0.0) > 0.0)
+            )
+    except Exception:
+        inferred = 0.0
+
+    if inferred <= 0.0:
+        try:
+            inferred = float(
+                max(float(r.width_m or 0.0) for r in roads_qs if (r.width_m or 0.0) > 0.0)
+            )
+        except Exception:
+            inferred = 0.0
+
+    if inferred > 0.0:
+        plot.road_width_m = inferred
+        plot.save(update_fields=["road_width_m"])
+        logger.info(
+            "Inferred road width %.2fm for plot %s-%s",
+            inferred,
+            plot.tp_scheme,
+            plot.fp_number,
+        )
+    return inferred
 
 
 # ── Result dataclasses ────────────────────────────────────────────────────────
@@ -253,9 +305,8 @@ def compute_feasibility_map(
     This is designed to be FAST (< 2s) — no skeleton, layout, or rules checks.
     Only envelope + placement geometry is tested.
     """
-    road_width = float(getattr(plot, "road_width_m", 0.0) or 0.0)
+    road_width = _infer_and_persist_road_width_m(plot)
     plot_area_sqm = float(plot.plot_area_sqm)
-    plot_area_sqft = float(plot.plot_area_sqft)
     plot_geom = plot.geom
 
     max_fsi = get_max_fsi()
@@ -371,7 +422,7 @@ def compute_feasibility_map(
                 # Track best footprint — use ACTUAL dimensions from placement
                 if placement.footprints:
                     avg_fp = sum(
-                        sqft_to_sqm(float(fp.area_sqft or 0.0))
+                        dxf_plane_area_to_sqm(float(fp.area_sqft or 0.0))
                         for fp in placement.footprints
                     ) / len(placement.footprints)
 
@@ -386,11 +437,12 @@ def compute_feasibility_map(
                         best_fp_depth_m = fp_d
 
                 # Estimate FSI — CAPPED at regulatory max
-                total_fp_sqft = sum(
-                    float(fp.area_sqft or 0.0) for fp in placement.footprints
+                total_fp_sqm = sum(
+                    dxf_plane_area_to_sqm(float(fp.area_sqft or 0.0))
+                    for fp in placement.footprints
                 )
-                est_bua_sqft = total_fp_sqft * test_floor_count
-                est_fsi = est_bua_sqft / plot_area_sqft if plot_area_sqft > 0 else 0.0
+                est_bua_sqm = total_fp_sqm * test_floor_count
+                est_fsi = est_bua_sqm / plot_area_sqm if plot_area_sqm > 0 else 0.0
                 est_fsi = min(est_fsi, max_fsi)  # CAP at regulatory max FSI
 
                 if est_fsi > best_fsi_for_n:

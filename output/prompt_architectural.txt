@@ -1,0 +1,150 @@
+Generate a professional architectural floor plan as a clean black-and-white technical drawing. Top-down orthographic view, scale 1:100. This must look like a drawing produced by a licensed architect for municipal building-plan submission.
+
+FLOOR PLATE AND STRUCTURE:
+  - Rectangular slab: 24.0m long x 12.0m deep
+  - Structural column grid at 4.5m centres (shown as filled circles with grid lines)
+  - Exterior walls: 230mm thick (double-line convention)
+  - Internal partition walls: 115mm thick (single line)
+  - All walls drawn as solid black lines with proper thickness
+
+CENTRAL SERVICE CORE:
+  - Core zone: 4.5m x 12.0m, positioned at centre of floor plate
+  - 2 passenger lifts (shown as rectangles with diagonal cross, ~2.1m x 2.1m each)
+  - 2 staircases (shown with parallel lines for treads, flight width 1.2m, landing at each end)
+  - Fire-escape lobby between lifts and stairs
+  - Lift lobby: open waiting area facing corridor, minimum 2.4m clear depth
+  - Electrical and plumbing shafts shown as small hatched squares adjacent to core
+
+CENTRAL CORRIDOR:
+  - Width: 1.5m clear, running 24.0m along the full floor plate length
+  - Double-loaded: units open onto both sides (north and south)
+  - Fire-rated doors at corridor ends
+  - Unit main doors open FROM corridor INTO each unit (door swing shown as quarter-arc into unit)
+
+UNIT 1 — 2BHK (65.0 sqm carpet area) on NORTH side:
+  ENTRY SEQUENCE (draw clearly):
+    - Main door position: on the corridor-facing wall, offset from centre
+    - Door: 900mm wide, swing arc shown as quarter-circle opening INTO unit
+    - Entry opens into a small foyer/passage (1.2m–1.8m depth)
+    - Foyer leads to living room — no direct view of bedrooms or toilets from entry
+  INTERNAL CIRCULATION:
+    - Flow: ENTRY → FOYER → LIVING/DINING → INTERNAL PASSAGE → BEDROOMS
+    - Internal passage: minimum 1.05m wide, connects to all bedrooms
+    - No dead-end corridors; passage serves multiple rooms efficiently
+    - Living room acts as central distribution space
+  ROOM LAYOUT:
+    - Living Room: 5.0m x 4.0m at north-west
+      → Connected to dining area (open-plan or archway)
+      → Exterior wall with windows for ventilation (GDCR Reg 13.4)
+      → Balcony access door from living room
+    - Kitchen: 3.5m x 3.0m at south-east
+      → Adjacent to dining area (direct access, no passage between)
+      → L-shaped or U-shaped counter along two walls
+      → Exterior wall or window for exhaust ventilation
+      → Utility/wash area attached to kitchen (if space permits)
+      → Diagonal hatching pattern on floor (wet zone convention)
+    - Master Bedroom: 4.0m x 3.5m at north-east
+      → Access from internal passage (door with swing arc)
+      → Exterior wall with window for natural light & ventilation
+      → Attached toilet/bathroom with door from bedroom (en-suite)
+      → Wardrobe niche (600mm deep) along one wall
+    - Bedroom 2: 3.5m x 3.0m at east
+      → Access from internal passage (door with swing arc)
+      → Exterior wall with window for natural light & ventilation
+      → Wardrobe space along wall opposite window
+    - Attached Toilet (en-suite to master): 2.0m x 2.5m at south-west
+      → Door opens from master bedroom
+      → Diagonal hatching on floor (wet zone)
+      → Grouped on internal/wet wall (shared plumbing stack)
+    - Common Toilet: 1.5m x 2.0m at south
+      → Door opens from internal passage (accessible to all bedrooms)
+      → Can double as powder room for guests
+      → Diagonal hatching on floor (wet zone)
+      → Grouped on internal/wet wall (shared plumbing stack)
+  PRIVACY & SPATIAL RULES:
+    - No direct line-of-sight from main door to any bedroom or toilet
+    - Bedroom doors not visible from unit entry
+    - Wet zones (kitchen, toilets) clustered on shared wall for plumbing stack
+    - All habitable rooms have at least one exterior wall with window
+    - Balcony accessible from living room (sliding door shown as parallel lines)
+
+UNIT 2 — 3BHK (92.5 sqm carpet area) on SOUTH side:
+  ENTRY SEQUENCE (draw clearly):
+    - Main door position: on the corridor-facing wall, offset from centre
+    - Door: 900mm wide, swing arc shown as quarter-circle opening INTO unit
+    - Entry opens into a small foyer/passage (1.2m–1.8m depth)
+    - Foyer leads to living room — no direct view of bedrooms or toilets from entry
+  INTERNAL CIRCULATION:
+    - Flow: ENTRY → FOYER → LIVING/DINING → INTERNAL PASSAGE → BEDROOMS
+    - Internal passage: minimum 1.05m wide, connects to all bedrooms
+    - No dead-end corridors; passage serves multiple rooms efficiently
+    - Living room acts as central distribution space
+  ROOM LAYOUT:
+    - Living Room: 5.5m x 4.5m at south-west
+      → Connected to dining area (open-plan or archway)
+      → Exterior wall with windows for ventilation (GDCR Reg 13.4)
+      → Balcony access door from living room
+    - Kitchen: 3.5m x 3.0m at north
+      → Adjacent to dining area (direct access, no passage between)
+      → L-shaped or U-shaped counter along two walls
+      → Exterior wall or window for exhaust ventilation
+      → Utility/wash area attached to kitchen (if space permits)
+      → Diagonal hatching pattern on floor (wet zone convention)
+    - Master Bedroom: 4.0m x 3.5m at south-east
+      → Access from internal passage (door with swing arc)
+      → Exterior wall with window for natural light & ventilation
+      → Attached toilet/bathroom with door from bedroom (en-suite)
+      → Wardrobe niche (600mm deep) along one wall
+    - Bedroom 2: 3.5m x 3.0m at east
+      → Access from internal passage (door with swing arc)
+      → Exterior wall with window for natural light & ventilation
+      → Wardrobe space along wall opposite window
+    - Bedroom 3: 3.5m x 3.0m at north-east
+      → Access from internal passage (door with swing arc)
+      → Exterior wall with window for natural light & ventilation
+      → Wardrobe space along wall opposite window
+    - Attached Toilet (en-suite to master): 2.0m x 2.5m at north-west
+      → Door opens from master bedroom
+      → Diagonal hatching on floor (wet zone)
+      → Grouped on internal/wet wall (shared plumbing stack)
+    - Common Toilet: 1.5m x 2.0m at west
+      → Door opens from internal passage (accessible to all bedrooms)
+      → Can double as powder room for guests
+      → Diagonal hatching on floor (wet zone)
+      → Grouped on internal/wet wall (shared plumbing stack)
+  PRIVACY & SPATIAL RULES:
+    - No direct line-of-sight from main door to any bedroom or toilet
+    - Bedroom doors not visible from unit entry
+    - Wet zones (kitchen, toilets) clustered on shared wall for plumbing stack
+    - All habitable rooms have at least one exterior wall with window
+    - Balcony accessible from living room (sliding door shown as parallel lines)
+
+WET ZONE STACKING (CRITICAL FOR MULTI-STOREY):
+  - All toilets and kitchens aligned vertically across units
+  - Shared plumbing wall between adjacent units
+  - Water supply and drainage risers shown as small circles on wet wall
+  - This ensures cost-efficient plumbing across all 13 floors
+
+DRAWING CONVENTIONS (must follow exactly):
+  - All doors: 900mm wide, shown as quarter-circle arc indicating swing direction
+  - Windows: double parallel lines on exterior walls (1.2m wide typical)
+  - Sliding doors (balcony): three parallel lines
+  - Wet zones (kitchen, toilets): diagonal line hatching at 45 degrees
+  - Dimension lines: on ALL rooms showing width x depth in metres
+  - Room labels: abbreviated text inside each room (LR, BR1, BR2, KIT, T1, T2, BAL, PASS)
+  - North arrow in top-right corner
+  - Structural columns: filled black circles at grid intersections
+  - Staircase: parallel lines showing treads with UP arrow
+  - Lifts: rectangle with diagonal X cross
+  - Wall thickness distinction: 230mm exterior (thick), 115mm interior (thin)
+
+TITLE BLOCK (bottom-right corner):
+  "Typical Floor Plan — 4 units/core — Mid Segment — Scale 1:100"
+  Floor plate: 24.0m x 12.0m | 4 units/floor | 2 lifts, 2 stairs
+
+OUTPUT REQUIREMENTS:
+  - Pure black lines on white background, NO colour, NO shading (except hatching)
+  - Perfectly orthographic top-down view, NO perspective, NO 3D effect
+  - Thin precise lines, architectural drafting quality
+  - Clean, readable, professional — suitable for municipal submission
+  - Every room must be clearly labelled and dimensioned

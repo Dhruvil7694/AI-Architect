@@ -1,0 +1,28 @@
+{
+  "prompt_length": 3872,
+  "layout": {
+    "units": 2,
+    "unit_types": [
+      "2BHK",
+      "2BHK"
+    ]
+  },
+  "metrics": {
+    "floorLengthM": 24.0,
+    "floorWidthM": 12.0,
+    "floorDepthM": 12.0,
+    "nUnitsPerFloor": 2,
+    "nFloors": 10,
+    "storeyHeightM": 3.0,
+    "buildingHeightM": 30.0,
+    "efficiencyPct": 75.0,
+    "netBuaSqm": 180.0,
+    "nLifts": 1,
+    "nStairs": 1
+  },
+  "dalle_params": {
+    "size": "1792x1024",
+    "quality": "hd",
+    "style": "natural"
+  }
+}

@@ -24,6 +24,7 @@ from residential_layout.repetition import (
     DEFAULT_MODULE_WIDTH_M,
     repeat_band,
 )
+from ai_planner.program_generator import ProgramSpec
 
 _TOL = 1e-6
 
@@ -147,6 +148,7 @@ def build_floor_layout(
     skeleton: FloorSkeleton,
     floor_id: str = "",
     module_width_m: Optional[float] = None,
+    program_spec: Optional[ProgramSpec] = None,
 ) -> FloorLayoutContract:
     """
     Phase 4 entry point: run repeat_band for every unit zone, aggregate into FloorLayoutContract.
@@ -169,7 +171,12 @@ def build_floor_layout(
         zone = skeleton.unit_zones[zone_index]
         frame = derive_unit_local_frame(skeleton, zone_index)
         try:
-            band_contract = repeat_band(zone, frame, module_width_m)
+            band_contract = repeat_band(
+                zone,
+                frame,
+                module_width_m,
+                program_spec=program_spec,
+            )
         except BandRepetitionError as e:
             raise FloorAggregationError(
                 f"Band {e.band_id} failed at slice {e.slice_index}: {e}",

@@ -537,6 +537,8 @@ export interface AIFloorPlanRequest {
   storey_height_m?: number;
   plot_area_sqm?: number;
   design_brief?: string;
+  /** Image generation model: "dalle3" | "gemini" | "recraft" | "ideogram" | "flux" | "svg_only" */
+  image_model?: string;
 }
 
 export interface AIFloorPlanMetrics {
@@ -568,11 +570,13 @@ export interface AIFloorPlanResponse {
   source: "ai";
   layout: FloorPlanLayout;
   layout_json?: Record<string, unknown>;
-  architectural_image: string | null;   // base64 PNG from DALL-E 3
-  presentation_image: string | null;    // base64 PNG from DALL-E 3
+  architectural_image: string | null;   // base64 PNG from image model
   svg_blueprint: string;                // SVG fallback, always present
   metrics: AIFloorPlanMetrics;
   design_notes: string;
+  image_model_used?: string;            // which model actually rendered images
+  /** AI-generated raster is schematic; SVG/JSON are authoritative for dimensions */
+  layout_authority_note?: string;
   error?: string;
 }
 

@@ -203,13 +203,28 @@ def _inter_building_margin(building_height_m: float) -> float:
     """
     Compute inter-building margin from GDCR Table 6.25.
 
-    Formula: max(H / 3, minimum_spacing_m)
-    Default minimum_spacing_m = 3.0 m.
+    Preferred mode (when configured):
+        height_spacing_map lookup by building height.
+
+    Fallback mode:
+        max(H / 3, minimum_spacing_m)
     """
     try:
         gdcr = get_gdcr_config()
         inter_cfg = gdcr.get("inter_building_margin", {}) or {}
         minimum_m = float(inter_cfg.get("minimum_spacing_m", 3.0))
+        spacing_map = inter_cfg.get("height_spacing_map") or []
+        if spacing_map:
+            for entry in spacing_map:
+                try:
+                    if building_height_m <= float(entry["height_max"]):
+                        return max(float(entry["margin"]), minimum_m)
+                except (KeyError, TypeError, ValueError):
+                    continue
+            try:
+                return max(float(spacing_map[-1]["margin"]), minimum_m)
+            except (KeyError, TypeError, ValueError):
+                pass
     except Exception:
         minimum_m = 3.0
 

@@ -1,6 +1,15 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py gdcr_100_compliance_report --tp 14 --output ../output/benchmark_baseline/tp14_gdcr100_report_v4_jantri.csv --jantri-rate-per-sqm 50000)",
+      "Bash(python manage.py gdcr_100_compliance_report --tp 14 --fps 107,181,23,17,55,133,34,152,169,171,176,178,18,21,29,3,31,48,54,90 --output ../output/benchmark_baseline/tp14_gdcr100_report_v4_jantri.csv --jantri-rate-per-sqm 50000)",
+      "Bash(python -c \":*)",
+      "Bash(python -:*)",
+      "Bash(python manage.py gdcr_100_compliance_report --tp 14 --output \"../output/benchmark_baseline/tp14_gdcr100_report_v5_newplacement.csv\" --jantri-rate-per-sqm 32000)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "stgen-dxf-viewer"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

@@ -8,6 +8,7 @@ export type ViewTransform = {
   width: number;
   height: number;
   padding: number;
+  flipY?: boolean;
 };
 
 export function createViewTransform(
@@ -15,6 +16,7 @@ export function createViewTransform(
   canvasWidth: number,
   canvasHeight: number,
   padding = 16,
+  options?: { flipY?: boolean },
 ): ViewTransform {
   const width = bounds.maxX - bounds.minX || 1;
   const height = bounds.maxY - bounds.minY || 1;
@@ -42,6 +44,7 @@ export function createViewTransform(
     width: canvasWidth,
     height: canvasHeight,
     padding,
+    flipY: options?.flipY ?? false,
   };
 }
 
@@ -51,7 +54,8 @@ export function projectPosition(
 ): Position {
   const [x, y] = position;
   const px = x * transform.scale + transform.translateX;
-  const py = y * transform.scale + transform.translateY;
+  const pyRaw = y * transform.scale + transform.translateY;
+  const py = transform.flipY ? transform.height - pyRaw : pyRaw;
   return [px, py];
 }
 

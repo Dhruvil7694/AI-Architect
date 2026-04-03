@@ -1,0 +1,25 @@
+fp_number,final_taxonomy_code,actionability_class,primary_failed_stage,candidate_phase1_workstream,rationale
+3,ENVELOPE_COLLAPSE_ROAD_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Road setback dominates available depth.
+17,ENVELOPE_COLLAPSE_SIDE_REAR_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Likely hard setback infeasibility for compact/thin geometry.
+18,ENVELOPE_COLLAPSE_ROAD_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Road setback dominates available depth.
+21,ENVELOPE_TOO_SMALL_AFTER_SETBACKS,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Likely hard setback infeasibility for compact/thin geometry.
+23,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+29,ENVELOPE_TOO_SMALL_AFTER_SETBACKS,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Likely hard setback infeasibility for compact/thin geometry.
+31,ENVELOPE_COLLAPSE_ROAD_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Road setback dominates available depth.
+34,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+48,ENVELOPE_TOO_SMALL_AFTER_SETBACKS,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Likely hard setback infeasibility for compact/thin geometry.
+54,ENVELOPE_COLLAPSE_ROAD_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Road setback dominates available depth.
+55,ENVELOPE_TOO_SMALL_AFTER_SETBACKS,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Likely hard setback infeasibility for compact/thin geometry.
+84,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+90,ENVELOPE_COLLAPSE_ROAD_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Road setback dominates available depth.
+107,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+127,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+132,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+133,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+152,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+169,ENVELOPE_COLLAPSE_SIDE_REAR_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Likely hard setback infeasibility for compact/thin geometry.
+171,ENVELOPE_COLLAPSE_ROAD_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Road setback dominates available depth.
+173,PIPELINE_PASS,CONTROL_PASS,Pass,Control,Pipeline pass; used as regression control.
+176,ENVELOPE_COLLAPSE_SIDE_REAR_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Likely hard setback infeasibility for compact/thin geometry.
+178,ENVELOPE_COLLAPSE_ROAD_SETBACK,NON_ACTIONABLE_REGULATORY,Envelope,N/A,Road setback dominates available depth.
+181,ENVELOPE_COLLAPSE_SIDE_REAR_SETBACK,ACTIONABLE_ENVELOPE,Envelope,P1-Envelope-Survivability,Large plot still fails envelope; likely geometry/heuristic artifact candidate.

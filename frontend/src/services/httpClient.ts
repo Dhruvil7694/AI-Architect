@@ -32,6 +32,15 @@ const config: HttpClientConfig = {
   baseUrl: DEFAULT_BASE_URL,
 };
 
+const CSRF_COOKIE_NAME = "csrftoken";
+const CSRF_HEADER_NAME = "X-CSRFToken";
+
+function getCsrfToken(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export async function httpRequest<TResponse, TBody = unknown>(
   path: string,
   options: {
@@ -43,7 +52,10 @@ export async function httpRequest<TResponse, TBody = unknown>(
 ): Promise<TResponse> {
   const { method = "GET", body, searchParams, headers } = options;
 
-  const url = new URL(path, config.baseUrl);
+  const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  const url = new URL(cleanPath, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  
   if (searchParams) {
     Object.entries(searchParams).forEach(([key, value]) => {
       if (value === undefined) return;
@@ -51,12 +63,22 @@ export async function httpRequest<TResponse, TBody = unknown>(
     });
   }
 
+  const requestHeaders: HeadersInit = {
+    "Content-Type": "application/json",
+    ...headers,
+  };
+  if (method !== "GET") {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      (requestHeaders as Record<string, string>)[CSRF_HEADER_NAME] = csrfToken;
+    }
+  }
+
+  console.log(`[HTTP] ${method} ${url.toString()}`);
+
   const response = await fetch(url.toString(), {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
+    headers: requestHeaders,
     body: body ? JSON.stringify(body) : undefined,
     credentials: "include",
   });
@@ -69,7 +91,8 @@ export async function httpRequest<TResponse, TBody = unknown>(
     const errorShape: HttpErrorShape = {
       status: response.status,
       message:
-        (isJson && (payload as any)?.message) ||
+        (isJson &&
+          ((payload as any)?.detail ?? (payload as any)?.message)) ||
         response.statusText ||
         "Request failed",
       code: isJson ? (payload as any)?.code : undefined,

@@ -1,0 +1,9 @@
+fp_number,road_width_m,authority,zone,corridor_eligible,corridor_distance_m,max_fsi,achieved_fsi,gross_bua_sqft,counted_bua_sqft,premium_additional_fsi_used,premium_amount_total_inr,check_corridor_geometry,check_legal_gating,check_exclusion_adjusted_fsi,check_premium_breakdown,check_end_to_end_feasible,overall_100_mode,notes,status,reason
+107,12.0,SUDA,R1,N,,2.7,1.1417,13396.02,13396.02,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,,
+133,60.0,SUDA,R1,Y,0.0,4.0,3.9149,155013.85,155013.85,2.1149,155594549.54,PASS,PASS,PASS,PASS,PASS,PASS,distance_check_200.0m;authority_zone_legal_gating_applied,,
+152,15.0,SUDA,R1,N,,2.7,0.263,1756.93,1756.93,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,,
+17,18.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,,
+181,12.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,,
+23,18.0,SUDA,R1,N,,2.7,2.2376,27151.78,27151.78,0.4376,9866350.49,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,,
+34,15.0,SUDA,R1,N,,2.7,0.0372,607.55,607.55,0.0,0.0,PASS,PASS,PASS,PASS,PASS,PASS,road_width_not_eligible;authority_zone_legal_gating_applied,,
+55,30.0,SUDA,R1,N,,2.7,0.0,0.0,0.0,0.0,0.0,PASS,PASS,PASS,PASS,FAIL,FAIL,road_width_not_eligible;authority_zone_legal_gating_applied,,

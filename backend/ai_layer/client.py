@@ -51,6 +51,7 @@ def call_openai(
     timeout_s: float = 15.0,
     temperature: float = 0.0,
     rate_limit_kind: str = "advisor",
+    max_tokens: int = 1024,
 ) -> Optional[str]:
     """
     Call OpenAI Chat Completions with JSON response. Returns raw response text or None on failure.
@@ -84,7 +85,7 @@ def call_openai(
                 {"role": "user", "content": user_prompt},
             ],
             temperature=temperature,
-            max_tokens=1024,
+            max_tokens=max_tokens,
             response_format={"type": "json_object"} if _supports_json_mode() else None,
             timeout=timeout_s,
         )
@@ -105,6 +106,101 @@ def call_openai(
                     model, getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None),
                     getattr(usage, "total_tokens", None), elapsed)
     return choice.message.content.strip()
+
+
+try:
+    import anthropic
+except ImportError:
+    anthropic = None  # type: ignore
+
+
+def call_claude(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    timeout_s: float = 60.0,
+    temperature: float = 0.2,
+    max_tokens: int = 8192,
+) -> Optional[str]:
+    """
+    Call Anthropic Claude Messages API. Returns raw response text or None on failure.
+    """
+    if anthropic is None:
+        logger.warning("anthropic package not installed; Claude calls will no-op.")
+        return None
+
+    from ai_layer.config import get_ai_config
+    config = get_ai_config()
+    api_key = config.claude_api_key
+    if not api_key:
+        logger.debug("CLAUDE_API_KEY not set; skipping Claude call.")
+        return None
+
+    client = anthropic.Anthropic(api_key=api_key)
+    start = time.monotonic()
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+    except Exception as e:
+        elapsed = time.monotonic() - start
+        logger.warning("Claude API call failed after %.2fs: %s", elapsed, type(e).__name__, exc_info=False)
+        return None
+
+    elapsed = time.monotonic() - start
+    if not response.content:
+        logger.warning("Claude returned empty content.")
+        return None
+
+    text = response.content[0].text.strip()
+    usage = getattr(response, "usage", None)
+    if usage:
+        logger.info(
+            "Claude model=%s usage: input_tokens=%s output_tokens=%s (%.2fs)",
+            model, getattr(usage, "input_tokens", None),
+            getattr(usage, "output_tokens", None), elapsed,
+        )
+    return text
+
+
+def call_llm(
+    model_choice: str,
+    system_prompt: str,
+    user_prompt: str,
+    timeout_s: float = 60.0,
+    temperature: float = 0.2,
+    max_tokens: int = 8192,
+) -> Optional[str]:
+    """
+    Unified LLM dispatcher. Routes to Claude or OpenAI based on model_choice.
+
+    model_choice: "claude" → call_claude, "gpt-4o" → call_openai
+    """
+    if model_choice == "claude":
+        from ai_layer.config import get_ai_config
+        config = get_ai_config()
+        return call_claude(
+            model=config.claude_model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            timeout_s=timeout_s,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    else:
+        return call_openai(
+            model=model_choice,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            timeout_s=timeout_s,
+            temperature=temperature,
+            rate_limit_kind="interpreter",
+            max_tokens=max_tokens,
+        )
 
 
 def parse_json_response(raw: Optional[str]) -> Optional[dict[str, Any]]:

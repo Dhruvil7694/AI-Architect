@@ -1327,6 +1327,7 @@ export function FloorPlanningView({
       unit_mix: inputs.unitMix ?? ["2BHK", "3BHK"],
       storey_height_m: 3.0,
       plot_area_sqm,
+      image_model: usePlannerStore.getState().imageModel,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTower?.id]);
@@ -1358,6 +1359,51 @@ export function FloorPlanningView({
     console.groupEnd();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floorPlanData?.placement_debug_metrics]);
+
+  // ── Derived tower identifiers (must be before any early return — Rules of Hooks) ──
+  const towerId = selectedTower
+    ? ((selectedTower.properties.towerId as string) ?? `T${(selectedTowerIndex ?? 0) + 1}`)
+    : "";
+
+  // ── SVG export — defined unconditionally to satisfy Rules of Hooks ────────
+  const exportSvg = useCallback(() => {
+    const svgEl = canvasRef.current?.getSvgElement();
+    if (!svgEl || !floorPlanData?.metrics) return;
+
+    const clone = svgEl.cloneNode(true) as SVGSVGElement;
+
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = `Tower ${towerId} — Typical Floor Plan`;
+    clone.insertBefore(title, clone.firstChild);
+
+    const desc = document.createElementNS("http://www.w3.org/2000/svg", "desc");
+    const m = floorPlanData.metrics;
+    desc.textContent = [
+      `Tower: ${towerId}`,
+      `Floors: ${m.nFloors}`,
+      `Height: ${m.buildingHeightM.toFixed(1)} m`,
+      `Net BUA: ${m.netBuaSqm.toFixed(0)} m²`,
+      `Units/floor: ${m.nUnitsPerFloor}`,
+      `Efficiency: ${m.efficiencyPct.toFixed(1)}%`,
+      `Generated: ${new Date().toISOString()}`,
+    ].join(" | ");
+    clone.insertBefore(desc, clone.firstChild);
+
+    const serialiser = new XMLSerializer();
+    const svgStr = serialiser.serializeToString(clone);
+    const blob = new Blob(
+      [`<?xml version="1.0" encoding="UTF-8"?>\n`, svgStr],
+      { type: "image/svg+xml;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `floor-plan-${towerId}-${m.nFloors}fl.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [canvasRef, floorPlanData, towerId]);
 
   // ── Guard: no tower selected (pick here when not auto-selected) ─────────────
   if (selectedTowerIndex == null || !selectedTower) {
@@ -1393,54 +1439,10 @@ export function FloorPlanningView({
     );
   }
 
-  const towerId = (selectedTower.properties.towerId as string) ?? `T${selectedTowerIndex + 1}`;
   const towerFloors = (selectedTower.properties.floors as number) ?? "—";
 
   const liftCapped    = floorPlanData?.metrics?.gdcr?.lift_capped;
   const liftCapReason = floorPlanData?.metrics?.gdcr?.lift_cap_reason;
-
-  // ── SVG export ────────────────────────────────────────────────────────────
-  const exportSvg = useCallback(() => {
-    const svgEl = canvasRef.current?.getSvgElement();
-    if (!svgEl || !floorPlanData?.metrics) return;
-
-    // Clone so we can add metadata without mutating live DOM
-    const clone = svgEl.cloneNode(true) as SVGSVGElement;
-
-    // Add title / description for accessibility and archival
-    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    title.textContent = `Tower ${towerId} — Typical Floor Plan`;
-    clone.insertBefore(title, clone.firstChild);
-
-    const desc = document.createElementNS("http://www.w3.org/2000/svg", "desc");
-    const m = floorPlanData.metrics;
-    desc.textContent = [
-      `Tower: ${towerId}`,
-      `Floors: ${m.nFloors}`,
-      `Height: ${m.buildingHeightM.toFixed(1)} m`,
-      `Net BUA: ${m.netBuaSqm.toFixed(0)} m²`,
-      `Units/floor: ${m.nUnitsPerFloor}`,
-      `Efficiency: ${m.efficiencyPct.toFixed(1)}%`,
-      `Generated: ${new Date().toISOString()}`,
-    ].join(" | ");
-    clone.insertBefore(desc, clone.firstChild);
-
-    // Serialise and trigger download
-    const serialiser = new XMLSerializer();
-    const svgStr = serialiser.serializeToString(clone);
-    const blob = new Blob(
-      [`<?xml version="1.0" encoding="UTF-8"?>\n`, svgStr],
-      { type: "image/svg+xml;charset=utf-8" },
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `floor-plan-${towerId}-${m.nFloors}fl.svg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [canvasRef, floorPlanData, towerId]);
 
   // ── Layout ───────────────────────────────────────────────────────────────────
   return (
@@ -1571,6 +1573,7 @@ export function FloorPlanningView({
                       unit_mix: inputs.unitMix ?? ["2BHK", "3BHK"],
                       storey_height_m: 3.0,
                       plot_area_sqm: (metrics.plotAreaSqm as number) ?? 0,
+                      image_model: usePlannerStore.getState().imageModel,
                     });
                   }}
                   className="flex items-center gap-1 rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-medium text-violet-700 hover:bg-violet-100"
@@ -1692,7 +1695,7 @@ export function FloorPlanningView({
           )}
 
           {/* AI Floor Plan — primary content */}
-          {(aiFloorPlanData?.svg_blueprint || aiFloorPlanData?.architectural_image || aiFloorPlanData?.presentation_image) && !aiPending && (
+          {(aiFloorPlanData?.svg_blueprint || aiFloorPlanData?.architectural_image) && !aiPending && (
             <div className="absolute inset-0 z-10 flex flex-col bg-white">
               {/* Header bar */}
               <div className="flex items-center gap-2 border-b border-violet-200 bg-violet-50 px-3 py-1.5">
@@ -1700,20 +1703,30 @@ export function FloorPlanningView({
                 {aiFloorPlanData.design_notes && (
                   <span className="text-[10px] text-violet-600">{aiFloorPlanData.design_notes}</span>
                 )}
-                {(aiFloorPlanData.architectural_image || aiFloorPlanData.presentation_image) && (
+                {aiFloorPlanData.architectural_image && aiFloorPlanData.image_model_used && aiFloorPlanData.image_model_used !== "svg_only" && (
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
-                    DALL-E 3
+                    {aiFloorPlanData.image_model_used === "dalle3" ? "DALL-E 3"
+                      : aiFloorPlanData.image_model_used === "gemini" ? "Nano Banana (Gemini)"
+                      : aiFloorPlanData.image_model_used === "recraft" ? "Recraft"
+                      : aiFloorPlanData.image_model_used === "ideogram" ? "Ideogram V2"
+                      : aiFloorPlanData.image_model_used === "flux" ? "FLUX"
+                      : aiFloorPlanData.image_model_used}
                   </span>
                 )}
               </div>
 
               {/* Image viewer with toggle */}
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 min-h-0 flex flex-col min-h-0">
                 <ZoomableImageViewer
                   architecturalImage={aiFloorPlanData.architectural_image ?? null}
-                  presentationImage={aiFloorPlanData.presentation_image ?? null}
                   svgFallback={aiFloorPlanData.svg_blueprint ?? null}
                 />
+                {aiFloorPlanData.architectural_image && aiFloorPlanData.image_model_used && aiFloorPlanData.image_model_used !== "svg_only" && (
+                  <p className="shrink-0 border-t border-violet-200 bg-violet-50/90 px-3 py-1 text-[9px] leading-snug text-violet-700/90">
+                    {aiFloorPlanData.layout_authority_note ??
+                      "SVG and layout JSON are authoritative for dimensions; raster preview is schematic."}
+                  </p>
+                )}
               </div>
 
               {/* AI metrics summary footer */}
@@ -1729,15 +1742,33 @@ export function FloorPlanningView({
             </div>
           )}
 
-          {/* AI loading overlay */}
+          {/* AI loading overlay — unified style on first load, translucent overlay on regeneration */}
           {aiPending && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90">
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-7 w-7 animate-spin rounded-full border-2 border-violet-300 border-t-violet-600" />
-                <p className="text-xs text-violet-600">Generating AI floor plan…</p>
-                <p className="text-[10px] text-neutral-400">This may take 10-30 seconds</p>
+            !aiFloorPlanData ? (
+              /* First generation: match the unified FloorCanvas loader exactly */
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-50/80 rounded-xl">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="relative">
+                    <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-neutral-200 border-t-neutral-800" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="h-3 w-3 rounded-full bg-neutral-800 animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-neutral-700">Generating floor plan</p>
+                    <p className="mt-1 text-xs text-neutral-400">AI is designing layout and rendering images…</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              /* Regeneration: overlay covers existing result */
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="h-7 w-7 animate-spin rounded-full border-[3px] border-neutral-200 border-t-neutral-800" />
+                  <p className="text-xs text-neutral-600">Regenerating floor plan…</p>
+                </div>
+              </div>
+            )
           )}
 
           {/* AI error overlay */}
@@ -1760,6 +1791,7 @@ export function FloorPlanningView({
                       unit_mix: inputs.unitMix ?? ["2BHK", "3BHK"],
                       storey_height_m: 3.0,
                       plot_area_sqm: (metrics.plotAreaSqm as number) ?? 0,
+                      image_model: usePlannerStore.getState().imageModel,
                     });
                   }}
                   className="mt-2 rounded bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200"

@@ -1,0 +1,82 @@
+<h2>Current Site Planning Pipeline — Issue Map</h2>
+<p class="subtitle">Click on the areas you want to prioritize improving (select multiple)</p>
+
+<div class="options" data-multiselect>
+
+  <div class="option" data-choice="cop" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>COP Placement</h3>
+      <p><strong>Current:</strong> Only 2 strategies — rear strip + center courtyard</p>
+      <p style="color:#e74c3c"><strong>Issues:</strong> Missing side-strip for L/irregular plots, no road-frontage-aware placement, no multi-COP splitting for large plots</p>
+      <p style="color:#888; font-size:0.85em">File: cop_planner.py</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="tower-topology" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>Tower Layout Topology</h3>
+      <p><strong>Current:</strong> GRID_2X2 and COMPOSITE_2_1 strategies exist but are NOT integrated into the main flow</p>
+      <p style="color:#e74c3c"><strong>Issues:</strong> Packer only tries ROW/COL/DIAG — no L-shaped, courtyard, or staggered arrangements. Falls to legacy packer too aggressively.</p>
+      <p style="color:#888; font-size:0.85em">Files: spatial_planner.py, packer.py</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="zone-decomp" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>Zone Decomposition</h3>
+      <p><strong>Current:</strong> SINGLE/STRIP/VORONOI strategies; MultiPolygon takes largest component only</p>
+      <p style="color:#e74c3c"><strong>Issues:</strong> Irregular plot shapes get poor zoning, no medial-axis based decomposition for complex plots</p>
+      <p style="color:#888; font-size:0.85em">File: zone_decomposer.py</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="fire-access" onclick="toggleSelect(this)">
+    <div class="letter">4</div>
+    <div class="content">
+      <h3>Fire Access Loop</h3>
+      <p><strong>Current:</strong> Buffer-based ring with only 2 widths (4.5m high-rise, 1.8m low-rise)</p>
+      <p style="color:#e74c3c"><strong>Issues:</strong> No intermediate widths, road edges already have access but still get buffered, wastes usable area</p>
+      <p style="color:#888; font-size:0.85em">File: fire_loop.py</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="spacing" onclick="toggleSelect(this)">
+    <div class="letter">5</div>
+    <div class="content">
+      <h3>Tower Spacing & Orientation</h3>
+      <p><strong>Current:</strong> H/3 exclusion zones + post-placement audit</p>
+      <p style="color:#e74c3c"><strong>Issues:</strong> Spacing only enforced after placement (reactive), not used to guide placement (proactive). No sunlight/wind-aware orientation.</p>
+      <p style="color:#888; font-size:0.85em">File: spacing_enforcer.py</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="overall-quality" onclick="toggleSelect(this)">
+    <div class="letter">6</div>
+    <div class="content">
+      <h3>Overall Design Quality</h3>
+      <p><strong>Current:</strong> Optimizes for constraint satisfaction, not design aesthetics</p>
+      <p style="color:#e74c3c"><strong>Issues:</strong> No scoring for: road frontage, entry placement, visual balance, symmetry, or professional site plan appearance</p>
+      <p style="color:#888; font-size:0.85em">Needs: design scoring layer</p>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:2rem; padding:1.5rem; background:#1a1a2e; border-radius:12px; border:1px solid #333">
+  <h3 style="margin-top:0">Current Pipeline Flow</h3>
+  <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; font-size:0.9em">
+    <div style="background:#2d3436; padding:0.5rem 1rem; border-radius:8px; border:1px solid #555">🔥 Fire Loop</div>
+    <span style="color:#666">→</span>
+    <div style="background:#2d3436; padding:0.5rem 1rem; border-radius:8px; border:1px solid #555">🟩 COP Place</div>
+    <span style="color:#666">→</span>
+    <div style="background:#2d3436; padding:0.5rem 1rem; border-radius:8px; border:1px solid #555">📐 Zone Split</div>
+    <span style="color:#666">→</span>
+    <div style="background:#2d3436; padding:0.5rem 1rem; border-radius:8px; border:1px solid #555">🏗️ Tower Pack</div>
+    <span style="color:#666">→</span>
+    <div style="background:#2d3436; padding:0.5rem 1rem; border-radius:8px; border:1px solid #555">✅ Validate</div>
+  </div>
+  <p style="color:#888; font-size:0.85em; margin-top:1rem">Relaxation cascade: if validation fails, loosen constraints (levels 0→4) and retry</p>
+</div>

@@ -1,0 +1,55 @@
+Professional architectural floor plan drawing. Top-down orthographic view. Black line drawing on white background. CAD technical drawing style. Clean precise linework. No 3D effects. No furniture. No color fills. No shadows. No perspective. High contrast technical illustration suitable for building permit submission.
+Rectangular floor plate: 24.0m wide × 12.0m deep (288sqm total). Exterior walls: thick black lines (230mm wall thickness). Interior partitions: thin black lines (115mm wall thickness). Clean orthogonal geometry with no diagonal walls or projections.
+LAYOUT STRUCTURE: Central service core with landing area. 2 residential unit(s) arranged around central core. Each unit has main entry door from landing into foyer. Stair and lift core at building center.
+
+SPATIAL CONNECTIVITY (must be clearly visible in plan):
+  Unit 1 flow: Entry → Foyer → Living (with balcony) → Kitchen adjacent | Passage → Master Bedroom (attached bathroom) + Bedroom-2 | Powder room near foyer
+  Unit 2 flow: Entry → Foyer → Living (with balcony) → Kitchen adjacent | Passage → Master Bedroom (attached bathroom) + Bedroom-2 | Powder room near foyer
+
+CONNECTIVITY RULES:
+  - All habitable rooms (living, bedrooms) must be on exterior walls with windows
+  - Kitchen adjacent to living/dining with shared wall or wide opening
+  - Balconies accessible from living room and/or master bedroom
+  - Master bedrooms have attached bathrooms on interior wall side
+  - Common toilet/powder room near living area, not in bedroom zone
+  - Passage/corridor provides access from living area to bedroom zone
+  - All bathrooms, toilets, and kitchen clustered for plumbing efficiency
+
+ROOM SPECIFICATIONS:
+  Unit 1 (2BHK, 12×6m): FYR 1.8×1.0m (1.8sqm), LR 4.5×3.8m (17.1sqm), KIT 3.0×2.5m (7.5sqm), BR1 3.5×3.0m (10.5sqm), WC 2.0×1.8m (3.6sqm), BR2 3.0×2.7m (8.1sqm), WC 1.5×1.8m (2.7sqm), PASS 1.5×1.5m (2.2sqm), BAL 3.0×1.5m (4.5sqm)
+  Unit 2 (2BHK, 12×6m): FYR 1.8×1.0m (1.8sqm), LR 4.5×3.8m (17.1sqm), KIT 3.0×2.5m (7.5sqm), BR1 3.5×3.0m (10.5sqm), WC 2.0×1.8m (3.6sqm), BR2 3.0×2.7m (8.1sqm), WC 1.5×1.8m (2.7sqm), PASS 1.5×1.5m (2.2sqm), BAL 3.0×1.5m (4.5sqm)
+
+ARCHITECTURAL SYMBOLS (standard conventions):
+  - Doors: 90° quarter-circle arc showing swing direction, door leaf visible
+  - Windows: Two short parallel lines breaking the wall (1.2-1.5m typical width)
+  - Stairs: Parallel lines with directional UP arrow, treads clearly visible
+  - Lifts: Rectangle with diagonal X crossing, labeled LIFT
+  - Balcony: Dashed outline boundary to distinguish from enclosed space
+  - Corridor: Labeled with width dimension
+
+LABELING (mandatory for every space):
+  - Every room must have centered label showing:
+    * Room name (e.g., LIVING ROOM, MASTER BEDROOM, KITCHEN)
+    * Dimensions in format: width × depth (e.g., 4.5m × 3.8m)
+    * Area in square meters (e.g., 17.1sqm)
+  - Label format example: 'LIVING ROOM\n4.5m × 3.8m\n17.1sqm'
+  - Core spaces labeled: LIFT, STAIR, LOBBY, CORRIDOR
+  - Dimension lines with arrows for key measurements
+  - Overall floor dimensions marked at corners: 24.0m × 12.0m
+  - North arrow indicator in corner
+  - Title block at bottom: 'TYPICAL FLOOR PLAN | 24m × 12m | 2 Units | Scale 1:100'
+
+QUALITY STANDARDS:
+  - All rooms must be accessible (no landlocked spaces)
+  - Minimum door widths: 900mm (main entry), 750mm (bedrooms), 600mm (bathrooms)
+  - Clear circulation paths visible throughout
+  - Professional presentation quality
+  - Readable text labels with consistent font hierarchy
+  - Clean white background with black linework only
+
+FINAL CONSTRAINTS:
+  - Strictly 2D top-down view, no isometric or 3D rendering
+  - No furniture, no interior decoration, no material textures
+  - No color fills except optional light gray for balconies
+  - No shadows, gradients, or photorealistic effects
+  - Technical drawing suitable for architectural documentation

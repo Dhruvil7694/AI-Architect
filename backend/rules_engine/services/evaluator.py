@@ -24,6 +24,7 @@ from rules_engine.rules.base import MISSING_DATA, RuleResult
 from rules_engine.rules.gdcr_rules import GDCR_EVALUATORS
 from rules_engine.rules.loader import get_all_rules
 from rules_engine.rules.nbc_rules import NBC_EVALUATORS
+from architecture.regulatory.fsi_policy import infer_authority, infer_zone_from_plot
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,8 @@ def build_inputs(proposal) -> Dict:
         "has_basement":     proposal.has_basement,
         "is_sprinklered":   proposal.is_sprinklered,
         "has_lift":         proposal.has_lift,
+        "authority":        infer_authority(),
+        "zone":             infer_zone_from_plot(plot),
     }
 
     # Optional fields — only add when not None so evaluators can distinguish

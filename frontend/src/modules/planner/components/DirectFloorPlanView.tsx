@@ -88,9 +88,14 @@ export function DirectFloorPlanView({ data, isPending, isError, error, onRetry }
             AI Generated
           </span>
         )}
-        {(data.architectural_image || data.presentation_image) && (
+        {data.architectural_image && data.image_model_used && data.image_model_used !== "svg_only" && (
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
-            DALL-E 3
+            {data.image_model_used === "dalle3" ? "DALL-E 3"
+              : data.image_model_used === "gemini" ? "Nano Banana (Gemini)"
+              : data.image_model_used === "recraft" ? "Recraft"
+              : data.image_model_used === "ideogram" ? "Ideogram V2"
+              : data.image_model_used === "flux" ? "FLUX"
+              : data.image_model_used}
           </span>
         )}
         {data.design_notes && (
@@ -99,12 +104,17 @@ export function DirectFloorPlanView({ data, isPending, isError, error, onRetry }
       </div>
 
       {/* Image viewer */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 flex flex-col min-h-0">
         <ZoomableImageViewer
           architecturalImage={data.architectural_image ?? null}
-          presentationImage={data.presentation_image ?? null}
           svgFallback={data.svg_blueprint ?? null}
         />
+        {data.architectural_image && data.image_model_used && data.image_model_used !== "svg_only" && (
+          <p className="shrink-0 border-t border-neutral-100 bg-neutral-50/80 px-3 py-1.5 text-[10px] leading-snug text-neutral-500">
+            {data.layout_authority_note ??
+              "SVG blueprint and layout JSON are dimensionally authoritative; this preview is schematic."}
+          </p>
+        )}
       </div>
 
       {/* Metrics footer */}

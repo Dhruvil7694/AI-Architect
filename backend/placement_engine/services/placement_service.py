@@ -24,7 +24,7 @@ Unit contract
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import List, Optional
 
 from django.contrib.gis.geos import GEOSGeometry
 from shapely.wkt import loads as shapely_loads
@@ -51,6 +51,7 @@ from placement_engine.geometry.core_fit import (
     NO_CORE_FIT,
 )
 from placement_engine.models import BuildingPlacement, FootprintRecord
+from placement_engine.debug.placement_debug import PlacementDebugMetrics
 
 
 # ── PlacementResult dataclass ──────────────────────────────────────────────────
@@ -89,28 +90,46 @@ class PlacementResult:
     # Core fit validation — one entry per placed tower
     per_tower_core_validation: list[CoreValidationResult] = field(default_factory=list)
 
+    # Debug metrics — populated by development_pipeline after envelope is known.
+    # None when compute_placement() is called standalone (envelope context absent).
+    debug_metrics: Optional[PlacementDebugMetrics] = None
+
+    # Spatial quality score for the winning packing strategy (0–1, higher = better).
+    layout_quality_score: Optional[float] = None
+
     error_message:        str = ""
 
 
 # ── Main compute function ──────────────────────────────────────────────────────
 
 def compute_placement(
-    envelope_wkt:       str,
-    building_height_m:  float,
-    n_towers:           int,
-    min_width_m:        float = MIN_FOOTPRINT_WIDTH_M,
-    min_depth_m:        float = MIN_FOOTPRINT_DEPTH_M,
+    envelope_wkt:          str,
+    building_height_m:     float,
+    n_towers:              int,
+    min_width_m:           float = MIN_FOOTPRINT_WIDTH_M,
+    min_depth_m:           float = MIN_FOOTPRINT_DEPTH_M,
+    road_edge_angles_deg:  Optional[List[float]] = None,
+    target_plate_area_sqft: Optional[float] = None,
+    preferred_depth_m:      Optional[float] = None,
+    # ── Spatial planner parameters (new) ─────────────────────────────────────
+    use_spatial_planner:   bool = True,
+    plot_polygon_wkt:      Optional[str] = None,
+    edge_specs:            Optional[list] = None,
+    cop_strategy:          str = "intelligent",
 ) -> PlacementResult:
     """
     Compute building placement(s) inside the given envelope.
 
     Parameters
     ----------
-    envelope_wkt      : WKT of the buildable envelope polygon (DXF feet).
-    building_height_m : Proposed building height in metres.
-    n_towers          : Number of towers requested.
-    min_width_m       : Minimum acceptable footprint width in metres (default 5 m).
-    min_depth_m       : Minimum acceptable footprint depth in metres (default 4 m).
+    envelope_wkt          : WKT of the buildable envelope polygon (DXF feet).
+    building_height_m     : Proposed building height in metres.
+    n_towers              : Number of towers requested.
+    min_width_m           : Minimum acceptable footprint width in metres (default 5 m).
+    min_depth_m           : Minimum acceptable footprint depth in metres (default 4 m).
+    road_edge_angles_deg  : Direction angles (degrees) of road-facing plot edges.
+                            Forwarded to the placement scorer for road-alignment
+                            heuristics.  None/[] → scorer uses a neutral 0.5 weight.
 
     Returns
     -------
@@ -164,7 +183,82 @@ def compute_placement(
     min_width_dxf = min_width_m * METRES_TO_DXF
     min_depth_dxf = min_depth_m * METRES_TO_DXF
 
-    # ── Run packing ────────────────────────────────────────────────────────────
+    # ── Spatial planner path (new pipeline) ──────────────────────────────────
+    if use_spatial_planner and plot_polygon_wkt and edge_specs:
+        try:
+            from placement_engine.geometry.spatial_planner import plan_site_layout
+
+            plot_polygon = shapely_loads(plot_polygon_wkt)
+
+            sp_result = plan_site_layout(
+                buildable_envelope=envelope,
+                plot_polygon=plot_polygon,
+                n_towers=n_towers,
+                building_height_m=building_height_m,
+                min_width_dxf=min_width_dxf,
+                min_depth_dxf=min_depth_dxf,
+                edge_specs=edge_specs,
+                road_edge_angles_deg=road_edge_angles_deg,
+                cop_strategy=cop_strategy,
+                target_plate_area_sqft=target_plate_area_sqft,
+            )
+
+            # Map SpatialPlanResult to PlacementResult (preserve API contract)
+            if sp_result.status != "INFEASIBLE" and sp_result.n_placed > 0:
+                if sp_result.n_placed == 0:
+                    sp_status = "NO_FIT"
+                elif sp_result.n_placed < n_towers:
+                    sp_status = "TOO_TIGHT"
+                else:
+                    sp_status = "VALID"
+
+                grid_res = (
+                    sp_result.footprints[0].grid_resolution_dxf
+                    if sp_result.footprints else None
+                )
+
+                # Core fit validation per tower
+                core_validations: list[CoreValidationResult] = []
+                for fp in sp_result.footprints:
+                    cv = validate_core_fit(fp.width_m, fp.depth_m, building_height_m)
+                    core_validations.append(cv)
+
+                if sp_status not in ("NO_FIT",) and any(
+                    cv.core_fit_status == NO_CORE_FIT for cv in core_validations
+                ):
+                    sp_status = "NO_FIT_CORE"
+
+                # Build spacing audit from the placed footprints
+                from placement_engine.geometry.spacing_enforcer import audit_spacing
+                sp_audit = audit_spacing(
+                    [fp.footprint_polygon for fp in sp_result.footprints],
+                    building_height_m,
+                )
+
+                return PlacementResult(
+                    status=sp_status,
+                    n_towers_requested=n_towers,
+                    n_towers_placed=sp_result.n_placed,
+                    building_height_m=building_height_m,
+                    spacing_required_m=required_spacing_m(building_height_m),
+                    spacing_required_dxf=required_spacing_dxf(building_height_m),
+                    orientation_primary_deg=orient.angle_primary_deg,
+                    orientation_secondary_deg=orient.angle_secondary_deg,
+                    packing_mode=sp_result.packing_mode,
+                    grid_resolution_dxf=grid_res,
+                    footprints=sp_result.footprints,
+                    placement_audit=sp_audit,
+                    per_tower_core_validation=core_validations,
+                    layout_quality_score=None,
+                    error_message="",
+                )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Spatial planner failed, falling through to legacy packer: %s", exc,
+            )
+
+    # ── Run packing (legacy path) ────────────────────────────────────────────
     try:
         packing: PackingResult = pack_towers(
             envelope=envelope,
@@ -172,6 +266,9 @@ def compute_placement(
             building_height_m=building_height_m,
             min_width_dxf=min_width_dxf,
             min_depth_dxf=min_depth_dxf,
+            road_edge_angles_deg=road_edge_angles_deg,
+            target_plate_area_sqft=target_plate_area_sqft,
+            preferred_depth_m=preferred_depth_m,
         )
     except Exception as exc:
         return _error_result("ERROR", f"Packing failed: {exc}",
@@ -217,6 +314,7 @@ def compute_placement(
         footprints=packing.footprints,
         placement_audit=packing.spacing_audit,
         per_tower_core_validation=core_validations,
+        layout_quality_score=packing.layout_quality_score,
         error_message="",
     )
 

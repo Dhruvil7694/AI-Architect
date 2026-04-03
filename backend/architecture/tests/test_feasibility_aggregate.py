@@ -35,7 +35,8 @@ class TestBuildabilityMetrics(TestCase):
         self.assertIsInstance(m, BuildabilityMetrics)
         self.assertEqual(m.envelope_area_sqft, 400.0)
         self.assertEqual(m.footprint_width_m, 7.0)
-        self.assertAlmostEqual(m.envelope_area_sqm, 400.0 * 0.09290304, places=4)
+        # envelope_area_sqft is DXF plane area (m²): convert 1:1 to sqm.
+        self.assertAlmostEqual(m.envelope_area_sqm, 400.0, places=4)
         self.assertEqual(m.efficiency_ratio, 0.45)
 
     def test_build_without_skeleton_ratios(self):
@@ -54,9 +55,12 @@ class TestBuildabilityMetrics(TestCase):
 
 class TestRegulatoryMetrics(TestCase):
     def test_build_regulatory_metrics(self):
+        # Plot must be above COP threshold (~2000 m²); 50k sq.ft ≈ 4645 m².
+        plot_area_sqft = 50000.0
+        total_bua_sqft = 100000.0
         m = build_regulatory_metrics(
-            plot_area_sqft=1600.0,
-            total_bua_sqft=2000.0,
+            plot_area_sqft=plot_area_sqft,
+            total_bua_sqft=total_bua_sqft,
             achieved_gc_pct=25.0,
             cop_provided_sqft=200.0,
             spacing_required_m=5.5,
@@ -64,8 +68,11 @@ class TestRegulatoryMetrics(TestCase):
         )
         self.assertIsInstance(m, RegulatoryMetrics)
         self.assertGreater(m.achieved_fsi, 0)
-        self.assertAlmostEqual(m.achieved_fsi, 2000.0 / 1600.0, places=4)
-        self.assertEqual(m.cop_required_sqft, 1600.0 * COP_REQUIRED_FRACTION)
+        self.assertAlmostEqual(m.achieved_fsi, total_bua_sqft / plot_area_sqft, places=4)
+        self.assertGreater(m.cop_required_sqft, 0.0)
+        self.assertAlmostEqual(
+            m.cop_required_sqft, plot_area_sqft * COP_REQUIRED_FRACTION, places=1
+        )
         self.assertEqual(m.spacing_provided_m, 6.0)
 
     def test_fsi_utilization(self):

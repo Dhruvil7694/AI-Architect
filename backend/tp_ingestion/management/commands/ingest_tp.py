@@ -18,6 +18,7 @@ Optional flags:
     --snap-tolerance   float   Max label-to-polygon snap distance in DXF units (default: 1.0)
     --save-invalid             Also save records that fail area validation
     --dry-run                  Parse and validate without writing to the database
+    --include-block-labels    Extract + store CAD BLOCK_NO overlay labels
 """
 
 from django.core.management.base import BaseCommand, CommandError
@@ -99,6 +100,36 @@ class Command(BaseCommand):
                 "Example: --label-layers \"FINAL F.P.\". Default: all layers."
             ),
         )
+        parser.add_argument(
+            "--debug-geojson-dir",
+            type=str,
+            default=None,
+            dest="debug_geojson_dir",
+            help=(
+                "When set, exports intermediate GeoJSON for debugging: "
+                "`raw_segments.geojson`, `polygonized.geojson`, `final_plots.geojson`."
+            ),
+        )
+        parser.add_argument(
+            "--snap-decimals",
+            type=int,
+            default=2,
+            dest="snap_decimals",
+            help="Coordinate snapping decimals before polygonization (default: 2).",
+        )
+        parser.add_argument(
+            "--polygonize-buffer",
+            type=float,
+            default=0.0,
+            dest="polygonize_buffer",
+            help="Optional small buffer used as a backup polygonization attempt (default: 0).",
+        )
+        parser.add_argument(
+            "--include-block-labels",
+            action="store_true",
+            dest="include_block_labels",
+            help="Extract + store overlay labels from DXF layer BLOCK_NO.",
+        )
 
     def handle(self, *args, **options):
         dxf_path = options["dxf_path"]
@@ -112,6 +143,10 @@ class Command(BaseCommand):
         update_existing = options["update_existing"]
         polygon_layers = options["polygon_layers"]
         label_layers = options["label_layers"]
+        debug_geojson_dir = options["debug_geojson_dir"]
+        snap_decimals = options["snap_decimals"]
+        polygonize_buffer = options["polygonize_buffer"]
+        include_block_labels = options["include_block_labels"]
 
         if dry_run:
             self.stdout.write(self.style.WARNING("DRY-RUN mode — no data will be written to the database."))
@@ -134,6 +169,10 @@ class Command(BaseCommand):
                 update_existing=update_existing,
                 polygon_layers=polygon_layers,
                 label_layers=label_layers,
+                debug_geojson_dir=debug_geojson_dir,
+                snap_decimals=snap_decimals,
+                polygonize_buffer=polygonize_buffer,
+                include_block_labels=include_block_labels,
             )
         except FileNotFoundError as exc:
             raise CommandError(str(exc)) from exc

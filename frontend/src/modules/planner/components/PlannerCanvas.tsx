@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { SvgCanvas, type SvgCanvasHandle } from "@/modules/planner/components/visualization/SvgCanvas";
 import type { GeometryModel, GeometryFeature } from "@/geometry/geojsonParser";
 import type { Position } from "@/geometry/geometryNormalizer";
@@ -24,6 +24,10 @@ import {
   CopCandidateZonesLayer,
   RoadNetworkLayer,
 } from "@/modules/planner/components/layers";
+import { InspectorPanel } from "@/modules/planner/components/InspectorPanel";
+import { ScaleBar } from "@/modules/planner/components/ScaleBar";
+import { NorthArrow } from "@/modules/planner/components/NorthArrow";
+import { ScenarioSelector } from "@/modules/planner/components/ScenarioSelector";
 
 const SQFT_TO_SQM = 0.09290304;
 
@@ -38,6 +42,13 @@ type HoverInfo = {
   screenPos: Position;
 };
 
+type InspectorSelectionKind = "tower" | "cop" | "plot";
+
+type InspectorSelection = {
+  kind: InspectorSelectionKind;
+  properties: Record<string, unknown>;
+};
+
 export function PlannerCanvas({
   geometryModel,
   isLoading = false,
@@ -45,6 +56,7 @@ export function PlannerCanvas({
 }: PlannerCanvasProps) {
   const canvasRef = useRef<SvgCanvasHandle>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
+  const [selectedFeature, setSelectedFeature] = useState<InspectorSelection | null>(null);
 
   const layerVisibility = usePlannerStore((s) => s.layerVisibility);
   const selectedTowerIndex = usePlannerStore((s) => s.selectedTowerIndex);
@@ -54,13 +66,57 @@ export function PlannerCanvas({
   const scenarios = usePlannerStore((s) => s.scenarios);
   const debugMode = usePlannerStore((s) => s.debugMode);
 
-  const scenario = scenarios.find((s) => s.id === activeScenarioId);
-  const summary = (scenario?.planResultSummary as {
+  const activeScenario =
+    scenarios.find((s) => s.id === activeScenarioId) ??
+    (scenarios.length > 0 ? scenarios[0] : undefined);
+
+  const summary = (activeScenario?.planResultSummary as {
     metrics?: Record<string, unknown>;
   }) ?? {};
   const metrics = summary.metrics ?? {};
 
-  if ((!geometryModel || geometryModel.features.length === 0) && isLoading) {
+  const exportSvg = useCallback(() => {
+    const svgEl = canvasRef.current?.getSvgElement();
+    if (!svgEl) return;
+
+    const clone = svgEl.cloneNode(true) as SVGSVGElement;
+
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = "Site Plan — Development Layout";
+    clone.insertBefore(title, clone.firstChild);
+
+    const desc = document.createElementNS("http://www.w3.org/2000/svg", "desc");
+    desc.textContent = [
+      metrics && typeof metrics.plotAreaSqm === "number" ? `Plot area: ${Math.round(metrics.plotAreaSqm)} m²` : null,
+      metrics && typeof metrics.maxFSI === "number" ? `Max FSI: ${metrics.maxFSI.toFixed(2)}` : null,
+      metrics && typeof metrics.achievedFSI === "number" ? `Achieved FSI: ${metrics.achievedFSI.toFixed(2)}` : null,
+      `Generated: ${new Date().toISOString()}`,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+    clone.insertBefore(desc, clone.firstChild);
+
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(clone);
+    const blob = new Blob(
+      [`<?xml version="1.0" encoding="UTF-8"?>\n`, svgStr],
+      { type: "image/svg+xml;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "site-plan.svg";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [canvasRef, metrics]);
+
+  const scenarioGeometryModel = (activeScenario as unknown as { geometryModel?: GeometryModel } | undefined)?.geometryModel;
+  const effectiveGeometryModel: GeometryModel | null =
+    scenarioGeometryModel ?? geometryModel;
+
+  if ((!effectiveGeometryModel || effectiveGeometryModel.features.length === 0) && isLoading) {
     // Show actual progress when available (backend reports 10 = running, 100 = done).
     // Fall back to an indeterminate shimmer while the first status poll is in flight.
     const hasProgress =
@@ -95,7 +151,7 @@ export function PlannerCanvas({
     );
   }
 
-  if (!geometryModel || geometryModel.features.length === 0) {
+  if (!effectiveGeometryModel || effectiveGeometryModel.features.length === 0) {
     return (
       <div className="flex h-full w-full flex-1 items-center justify-center rounded-md border border-dashed border-neutral-300 bg-neutral-50">
         <p className="text-xs text-neutral-500">
@@ -106,10 +162,25 @@ export function PlannerCanvas({
     );
   }
 
-  const grouped = groupFeaturesByLayer(geometryModel);
+  const grouped = groupFeaturesByLayer(effectiveGeometryModel);
+
 
   return (
     <div className="relative flex h-full w-full flex-1 flex-col bg-white">
+      <div className="z-10 flex items-center gap-2 px-3 pt-2">
+        <ScenarioSelector />
+        {metrics.generationSource && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${
+              metrics.generationSource === "ai"
+                ? "bg-violet-100 text-violet-700 ring-1 ring-violet-200"
+                : "bg-neutral-100 text-neutral-600 ring-1 ring-neutral-200"
+            }`}
+          >
+            {metrics.generationSource === "ai" ? "AI-Generated" : "Algorithmic"}
+          </span>
+        )}
+      </div>
       <div className="absolute right-2 top-2 z-10 flex gap-1 rounded bg-white/90 p-1 shadow">
         <button
           type="button"
@@ -127,9 +198,17 @@ export function PlannerCanvas({
         >
           Reset
         </button>
+        <button
+          type="button"
+          onClick={exportSvg}
+          className="rounded px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+          title="Export site plan as SVG"
+        >
+          SVG
+        </button>
       </div>
 
-      <SvgCanvas geometryModel={geometryModel} canvasRef={canvasRef}>
+      <SvgCanvas geometryModel={effectiveGeometryModel} canvasRef={canvasRef}>
         {({ viewTransform }) => (
           <>
             <PlotLayer
@@ -267,46 +346,88 @@ export function PlannerCanvas({
                 />
               </>
             )}
+            <ScaleBar viewTransform={viewTransform} />
+            <NorthArrow />
           </>
         )}
       </SvgCanvas>
 
+
       {hover && (
         <div
-          className="pointer-events-none absolute z-10 max-w-[200px] rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs shadow-lg"
+          className="pointer-events-none absolute z-10 max-w-[220px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-xl"
           style={{
-            left: hover.screenPos[0] + 12,
-            top: hover.screenPos[1] + 12,
+            left: hover.screenPos[0] + 14,
+            top: hover.screenPos[1] + 14,
           }}
         >
-          {hover.feature.layer === "cop" && (
-            <>
-              <div className="font-medium">COP</div>
-              <div>Area: {Math.round((Number(metrics.copAreaSqft) || 0) * SQFT_TO_SQM)} m²</div>
-              <div>Required: {Math.round((Number((metrics as Record<string, unknown>).copRequiredSqm) ?? (Number(metrics.copAreaSqft) || 0) * SQFT_TO_SQM))} m²</div>
-            </>
-          )}
-          {hover.feature.layer === "towerFootprints" && (
-            <>
-              <div className="font-medium">Tower</div>
-              <div>Footprint: {getFeatureAreaM2(hover.feature) != null ? `${Math.round(getFeatureAreaM2(hover.feature)!)} m²` : "—"}</div>
-              <div>Floors: {(hover.feature.properties?.floors as number) ?? "—"}</div>
-            </>
-          )}
+          {hover.feature.layer === "cop" && (() => {
+            const p = hover.feature.properties ?? {};
+            const areaSqm  = (p.area_sqm as number | undefined) ?? Math.round((Number(metrics.copAreaSqft) || 0) * SQFT_TO_SQM);
+            const reqSqm   = (metrics as Record<string, unknown>).copRequiredSqm as number | undefined;
+            const widthM   = p.width_m  as number | undefined;
+            const depthM   = p.depth_m  as number | undefined;
+            const minDim   = p.min_dimension_m as number | undefined;
+            const copOk    = p.cop_ok   as boolean | undefined;
+            return (
+              <>
+                <div className="mb-1 font-semibold text-green-700">Common Open Plot</div>
+                <div className="space-y-0.5">
+                  <div className="flex justify-between gap-4"><span className="text-neutral-500">Area</span><span className="font-medium">{Math.round(areaSqm)} m²</span></div>
+                  {reqSqm != null && <div className="flex justify-between gap-4"><span className="text-neutral-500">Required</span><span className="font-medium">≥ {Math.round(reqSqm)} m²</span></div>}
+                  {widthM != null && depthM != null && <div className="flex justify-between gap-4"><span className="text-neutral-500">Size</span><span className="font-medium">{widthM.toFixed(1)} × {depthM.toFixed(1)} m</span></div>}
+                  {minDim != null && <div className="flex justify-between gap-4"><span className="text-neutral-500">Min dim</span><span className={`font-medium ${copOk === false ? "text-red-600" : "text-green-700"}`}>{minDim.toFixed(1)} m {copOk === false ? "⚠ < 7.5m" : "✓"}</span></div>}
+                </div>
+              </>
+            );
+          })()}
+
+          {hover.feature.layer === "towerFootprints" && (() => {
+            const p = hover.feature.properties ?? {};
+            const areaSqm  = (p.area_sqm  as number | undefined) ?? getFeatureAreaM2(hover.feature);
+            const widthM   = p.width_m    as number | undefined;
+            const depthM   = p.depth_m    as number | undefined;
+            const floors   = p.floors     as number | undefined;
+            const heightM  = p.height_m   as number | undefined;
+            const buaSqm   = p.bua_sqm    as number | undefined;
+            const towerId  = p.towerId    as string | undefined;
+            return (
+              <>
+                <div className="mb-1 font-semibold text-blue-700">{towerId ?? "Tower"}</div>
+                <div className="space-y-0.5">
+                  {areaSqm != null && <div className="flex justify-between gap-4"><span className="text-neutral-500">Footprint</span><span className="font-medium">{Math.round(areaSqm)} m²</span></div>}
+                  {widthM != null && depthM != null && <div className="flex justify-between gap-4"><span className="text-neutral-500">Size</span><span className="font-medium">{widthM.toFixed(1)} × {depthM.toFixed(1)} m</span></div>}
+                  {floors != null && <div className="flex justify-between gap-4"><span className="text-neutral-500">Floors</span><span className="font-medium">{floors} F</span></div>}
+                  {heightM != null && <div className="flex justify-between gap-4"><span className="text-neutral-500">Height</span><span className="font-medium">{heightM.toFixed(1)} m</span></div>}
+                  {buaSqm != null && <div className="flex justify-between gap-4"><span className="text-neutral-500">BUA</span><span className="font-medium">{Math.round(buaSqm)} m²</span></div>}
+                </div>
+              </>
+            );
+          })()}
+
           {hover.feature.layer === "plotBoundary" && (
             <>
-              <div className="font-medium">Plot</div>
-              <div>Area: {Math.round(Number(metrics.plotAreaSqm) || 0)} m²</div>
+              <div className="mb-1 font-semibold text-neutral-700">Plot Boundary</div>
+              <div className="space-y-0.5">
+                <div className="flex justify-between gap-4"><span className="text-neutral-500">Area</span><span className="font-medium">{Math.round(Number(metrics.plotAreaSqm) || 0)} m²</span></div>
+                {typeof (metrics as Record<string, unknown>).roadWidthM === "number" && <div className="flex justify-between gap-4"><span className="text-neutral-500">Road</span><span className="font-medium">{((metrics as Record<string, unknown>).roadWidthM as number).toFixed(0)} m wide</span></div>}
+                {typeof (metrics as Record<string, unknown>).maxFSI === "number" && <div className="flex justify-between gap-4"><span className="text-neutral-500">FSI allowed</span><span className="font-medium">{((metrics as Record<string, unknown>).maxFSI as number).toFixed(2)}</span></div>}
+              </div>
             </>
           )}
+
           {hover.feature.layer === "envelope" && (
             <>
-              <div className="font-medium">Envelope</div>
-              <div>Ground coverage: {typeof metrics.groundCoveragePct === "number" ? `${metrics.groundCoveragePct.toFixed(1)}%` : "—"}</div>
+              <div className="mb-1 font-semibold text-neutral-700">Buildable Envelope</div>
+              <div className="space-y-0.5">
+                <div className="flex justify-between gap-4"><span className="text-neutral-500">GC</span><span className="font-medium">{typeof metrics.groundCoveragePct === "number" ? `${metrics.groundCoveragePct.toFixed(1)}%` : "—"}</span></div>
+                {typeof (metrics as Record<string, unknown>).envelopeAreaSqft === "number" && <div className="flex justify-between gap-4"><span className="text-neutral-500">Env area</span><span className="font-medium">{Math.round(((metrics as Record<string, unknown>).envelopeAreaSqft as number) * SQFT_TO_SQM)} m²</span></div>}
+              </div>
             </>
           )}
+
           {!["cop", "towerFootprints", "plotBoundary", "envelope"].includes(hover.feature.layer) && (
-            <div className="font-medium">{hover.feature.layer}</div>
+            <div className="font-semibold capitalize text-neutral-600">{hover.feature.layer.replace(/([A-Z])/g, " $1")}</div>
           )}
         </div>
       )}
@@ -321,6 +442,15 @@ export function PlannerCanvas({
           >
             Design Floor Plan
           </button>
+        </div>
+      )}
+
+      {selectedFeature && (
+        <div className="absolute right-3 top-16 bottom-3 z-20 w-64">
+          <InspectorPanel
+            selectedFeature={selectedFeature}
+            onClose={() => setSelectedFeature(null)}
+          />
         </div>
       )}
     </div>

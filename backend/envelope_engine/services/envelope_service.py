@@ -82,6 +82,9 @@ class EnvelopeResult:
     # Full per-edge audit log (list of dicts)
     edge_margin_audit: list = field(default_factory=list)
 
+    # Raw EdgeSpec objects (for spatial planner — avoids reconstructing from audit)
+    edge_specs_raw: list = field(default_factory=list)
+
     # Input snapshot
     road_facing_edges:    list = field(default_factory=list)
     building_height_used: Optional[float] = None
@@ -139,6 +142,7 @@ def compute_envelope(
         # ── Step 2: Resolve margins ────────────────────────────────────────────
         resolve_margins(edge_specs, building_height)
         result.edge_margin_audit = margin_audit_log(edge_specs)
+        result.edge_specs_raw = edge_specs
 
         _log_margin_summary(edge_specs, building_height, road_width)
 

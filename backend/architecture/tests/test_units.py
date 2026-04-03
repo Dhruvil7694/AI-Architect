@@ -34,10 +34,14 @@ class TestCommonUnits(TestCase):
         self.assertAlmostEqual(SQFT_TO_SQM * SQM_TO_SQFT, 1.0, places=10)
 
     def test_dxf_to_metres(self):
-        # 1 ft = 0.3048 m
-        self.assertAlmostEqual(dxf_to_metres(1.0), 0.3048, places=6)
+        # Drawing unit is metres: 1 DXF unit = 1 m
+        self.assertAlmostEqual(dxf_to_metres(1.0), 1.0, places=6)
 
-    def test_sqft_sqm_consistent_with_dxf(self):
-        # (1 ft)^2 = (0.3048 m)^2
-        expected = DXF_TO_METRES ** 2
-        self.assertAlmostEqual(SQFT_TO_SQM, expected, places=8)
+    def test_dxf_plane_area_to_sqm_matches_constant(self):
+        from common.units import dxf_plane_area_to_sqm
+
+        self.assertAlmostEqual(
+            dxf_plane_area_to_sqm(100.0),
+            100.0 * DXF_TO_METRES**2,
+            places=8,
+        )

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, Any
 
+from django.utils import timezone
+
 from architecture.feasibility.regulatory_metrics import (
     _get_gdcr_fsi,
     COP_REQUIRED_FRACTION,
@@ -10,6 +12,9 @@ from rules_engine.rules.loader import get_gdcr_config
 
 from tp_ingestion.models import Plot
 from services.plot_service import get_plot_by_public_id
+
+# Bump when plot area / DXF unit contract changes so stale JSON is not served.
+_SITE_METRICS_SCHEMA_VERSION = 2
 
 
 def _effective_cop_area_sqm(plot_area_sqm: float) -> float:
@@ -47,6 +52,9 @@ def compute_site_metrics(plot_id: str) -> Dict[str, Any]:
         the envelope carver (e.g. 200 sqm minimum can yield ~13% on smaller plots).
     """
     plot: Plot = get_plot_by_public_id(plot_id)
+    cached = plot.cached_site_metrics_json
+    if cached and int(cached.get("_schemaVersion", 0)) == _SITE_METRICS_SCHEMA_VERSION:
+        return {k: v for k, v in cached.items() if k != "_schemaVersion"}
 
     plot_area_sqm = float(plot.plot_area_sqm)
     base_fsi, max_fsi = _get_gdcr_fsi()
@@ -54,7 +62,8 @@ def compute_site_metrics(plot_id: str) -> Dict[str, Any]:
     max_bua_sqm = plot_area_sqm * max_fsi
     cop_area_sqm = _effective_cop_area_sqm(plot_area_sqm)
 
-    return {
+    payload = {
+        "_schemaVersion": _SITE_METRICS_SCHEMA_VERSION,
         "plotId": f"{plot.tp_scheme}-{plot.fp_number}",
         "plotAreaSqm": plot_area_sqm,
         "baseFSI": base_fsi,
@@ -64,6 +73,10 @@ def compute_site_metrics(plot_id: str) -> Dict[str, Any]:
         # For now we expose a simple label; future work can use real strategy.
         "copStrategy": "central",
     }
+    plot.cached_site_metrics_json = payload
+    plot.cached_metrics_updated_at = timezone.now()
+    plot.save(update_fields=["cached_site_metrics_json", "cached_metrics_updated_at"])
+    return payload
 
 
 __all__ = ["compute_site_metrics"]

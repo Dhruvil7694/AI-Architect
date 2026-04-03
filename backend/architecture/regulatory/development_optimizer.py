@@ -45,6 +45,14 @@ from architecture.regulatory.height_solver import (
     _spacing_provided_m_from_audit,
     _side_rear_margins_from_audit,
 )
+from architecture.regulatory.fsi_policy import (
+    compute_exclusion_adjusted_bua_sqft,
+    compute_premium_breakdown,
+    resolve_fsi_policy,
+    infer_authority,
+    infer_zone_from_plot,
+)
+from common.units import dxf_plane_area_to_sqm, sqm_to_sqft
 
 
 @dataclass
@@ -60,9 +68,13 @@ class OptimalDevelopmentSolution:
     controlling_constraint: str
     cop_strategy: str = "edge"
     cop_area_sqft: float = 0.0
+    exclusion_adjusted_bua_sqft: float = 0.0
+    premium_breakdown: Optional[dict] = None
+    # Human-readable failure reason; populated only when infeasible.
+    feasibility_detail: str = ""
 
 
-def _infeasible_solution() -> OptimalDevelopmentSolution:
+def _infeasible_solution(detail: str = "") -> OptimalDevelopmentSolution:
     return OptimalDevelopmentSolution(
         n_towers=0,
         floors=0,
@@ -73,6 +85,9 @@ def _infeasible_solution() -> OptimalDevelopmentSolution:
         per_tower_footprint_sqft=[],
         gc_utilization_pct=0.0,
         controlling_constraint="INFEASIBLE",
+        exclusion_adjusted_bua_sqft=0.0,
+        premium_breakdown=None,
+        feasibility_detail=detail,
     )
 
 
@@ -176,7 +191,10 @@ def _build_multi_tower_regulatory_ctx(
     if not footprints:
         return False, None
 
-    total_footprint_sqft = sum(float(fp.area_sqft or 0.0) for fp in footprints)
+    total_footprint_sqft = sum(
+        sqm_to_sqft(dxf_plane_area_to_sqm(float(fp.area_sqft or 0.0)))
+        for fp in footprints
+    )
     if total_footprint_sqft <= 0.0:
         return False, None
 
@@ -184,13 +202,32 @@ def _build_multi_tower_regulatory_ctx(
 
     spacing_required_m = getattr(placement, "spacing_required_m", 0.0) or 0.0
     spacing_provided_m = _spacing_provided_m_from_audit(placement)
+    policy = resolve_fsi_policy(
+        plot=plot,
+        road_width_m=float(getattr(plot, "road_width_m", 0.0) or 0.0),
+        authority_override=None,
+        zone_override=None,
+        distance_to_wide_road_m=None,
+    )
 
-    cop_provided_sqft = env.common_plot_area_sqft or 0.0
+    cop_provided_sqft = sqm_to_sqft(
+        dxf_plane_area_to_sqm(float(env.common_plot_area_sqft or 0.0))
+    )
     total_bua_sqft = total_footprint_sqft * floors
+    per_tower_cv = getattr(placement, "per_tower_core_validation", None) or []
+    core_areas_sqm = [float(getattr(cv, "core_area_estimate_sqm", 0.0) or 0.0) for cv in per_tower_cv]
+    counted_bua_sqft = compute_exclusion_adjusted_bua_sqft(
+        total_bua_sqft=total_bua_sqft,
+        floors=floors,
+        per_tower_core_area_sqm=core_areas_sqm,
+        has_parking_floor_exclusion=True,
+        building_height_m=height_m,
+        typical_floor_area_sqft=total_footprint_sqft,
+    )
 
     regulatory = build_regulatory_metrics(
         plot_area_sqft=plot_area_sqft,
-        total_bua_sqft=total_bua_sqft,
+        total_bua_sqft=counted_bua_sqft,
         achieved_gc_pct=achieved_gc_pct,
         cop_provided_sqft=cop_provided_sqft,
         spacing_required_m=spacing_required_m,
@@ -201,11 +238,14 @@ def _build_multi_tower_regulatory_ctx(
         "height_m": height_m,
         "floors": floors,
         "total_footprint_area_sqft": total_footprint_sqft,
+        "gross_total_bua_sqft": total_bua_sqft,
+        "counted_total_bua_sqft": counted_bua_sqft,
         "regulatory": regulatory,
         "envelope": env,
         "placement": placement,
         "spacing_required_m": spacing_required_m,
         "spacing_provided_m": spacing_provided_m,
+        "fsi_policy": policy,
     }
     return True, ctx
 
@@ -228,7 +268,7 @@ def _is_compliant_via_rules_multi(
     height_m = ctx["height_m"]
     floors = ctx["floors"]
     total_footprint_sqft = ctx["total_footprint_area_sqft"]
-    total_bua_sqft = total_footprint_sqft * floors
+    total_bua_sqft = float(ctx.get("counted_total_bua_sqft") or (total_footprint_sqft * floors))
     road_width = float(getattr(pm, "road_width_m", 0.0) or 0.0)
 
     # Ground coverage: sum of tower footprints.
@@ -249,6 +289,7 @@ def _is_compliant_via_rules_multi(
     # has_lift: any tower core that requires a lift.
     per_tower_cv = getattr(placement, "per_tower_core_validation", None) or []
     has_lift = any(getattr(cv, "lift_required", False) for cv in per_tower_cv)
+    policy = ctx.get("fsi_policy")
 
     rule_params = {
         "road_width": road_width,
@@ -259,6 +300,9 @@ def _is_compliant_via_rules_multi(
         "has_basement": False,
         "is_sprinklered": False,
         "has_lift": has_lift,
+        "authority": infer_authority(),
+        "zone": infer_zone_from_plot(plot),
+        "distance_to_wide_road": (policy.corridor_distance_m if policy else None),
     }
     if side_m is not None:
         rule_params["side_margin"] = side_m
@@ -380,16 +424,32 @@ def solve_optimal_development_configuration(
 
     road_width = float(getattr(plot, "road_width_m", 0.0) or 0.0)
     if road_width <= 0.0:
-        return _infeasible_solution()
+        return _infeasible_solution("road_width_missing_or_zero")
 
     # Step 1 — regulatory height ceiling (road-width cap only; no layout reduction).
     h_road_cap = get_max_permissible_height_by_road_width(road_width)
     if not (h_road_cap > 0.0):
-        return _infeasible_solution()
+        return _infeasible_solution(f"no_height_cap_for_road_width_{road_width}m")
 
     max_floors = floor(h_road_cap / storey_height_m)
     if max_floors <= 0:
-        return _infeasible_solution()
+        return _infeasible_solution(
+            f"road_width_cap_too_low: h_road_cap={h_road_cap:.1f}m storey={storey_height_m:.1f}m"
+        )
+
+    # ── Core-fit-derived minimum footprint dimensions ────────────────────────
+    # These are architectural minimums from NBC/GDCR END_CORE fit pattern.
+    # Formula: core_pkg_w = n_stairs*1.0 + wall(0.23) + [lift(1.5)+wall(0.23)] + clear(0.30)
+    #   No-lift  (h<=10m): 1*1.0+0.23+0+0.30        = 1.53m  -> ec_min_w=4.53 -> use 4.65m
+    #   1-stair  (h<=15m): 1*1.0+0.23+1.5+0.23+0.30 = 3.26m  -> ec_min_w=6.26 -> use 6.36m
+    #   2-stair  (h>15m) : 2*1.0+0.23+1.5+0.23+0.30 = 4.26m  -> ec_min_w=7.26 -> use 7.36m
+    # stair_run depth (END_CORE): 3.6m -> use 3.7m (+0.1 tolerance)
+    _LIFT_THRESHOLD_M      = 10.0
+    _HIGHRISE_THRESHOLD_M  = 15.0
+    _NO_LIFT_ARCH_MIN_W    = 4.65   # 4.53 + 0.12 tolerance
+    _LIFT_ARCH_MIN_W       = 6.36   # 6.26 + 0.10 tolerance
+    _HIGHRISE_ARCH_MIN_W   = 7.36   # 7.26 + 0.10 tolerance
+    _ARCH_MIN_DEPTH        = 3.7    # stair_run(3.6) + 0.10 tolerance
 
     # Step 2 — regulatory limits for FSI/GC (used only for FSI ceiling and
     # reporting; GC enforcement is delegated to the rules engine to avoid
@@ -398,23 +458,45 @@ def solve_optimal_development_configuration(
     # caps are computed per-plot/floors loop via get_dynamic_max_fsi().
     default_max_fsi = get_max_fsi()
     max_gc_pct = get_max_ground_coverage_pct()
+    cached_policy = None
+    try:
+        cached_policy = resolve_fsi_policy(
+            plot=plot,
+            road_width_m=road_width,
+            authority_override=None,
+            zone_override=None,
+            distance_to_wide_road_m=None,
+        )
+    except Exception:
+        cached_policy = None
 
     best_solution: Optional[OptimalDevelopmentSolution] = None
     best_fsi: float = -1.0
     fsi_tol = 1e-6
 
+    # ── Failure-stage tracking (for feasibility_detail on infeasible return) ──
+    _envelope_fail_floors: list[str] = []
+    _placement_fail_floors: list[str] = []
+    _rules_fail_count = 0
+    _layout_fail_count = 0
+    _total_floors_tried = 0
+
     # Outer loop: floors (descending).
     for floors in range(max_floors, 0, -1):
         height_m = floors * storey_height_m
+        _total_floors_tried += 1
 
         # Dynamic max FSI cap for this plot under current road width.
         max_fsi = default_max_fsi
         try:
             from architecture.regulatory_accessors import get_dynamic_max_fsi
+            distance_to_wide_road_m = cached_policy.corridor_distance_m if cached_policy else None
 
             max_fsi = get_dynamic_max_fsi(
                 float(getattr(plot, "plot_area_sqft", plot.area_geometry)),
                 road_width,
+                distance_to_wide_road_m=distance_to_wide_road_m,
+                plot=plot,
             )
         except Exception:
             # Fall back to legacy global cap if dynamic accessor fails.
@@ -422,6 +504,22 @@ def solve_optimal_development_configuration(
 
         if debug:
             print(f"[DEV-DEBUG] Candidate floors={floors}, height_m={height_m:.3f}")
+
+        # ── Height-adaptive minimum footprint dimensions ─────────────────────
+        # For no-lift heights use the architectural minimum derived from core
+        # fit (END_CORE pattern).  For lift-required heights enforce the larger
+        # core package width so the placement never returns footprints that will
+        # trivially fail core validation.
+        if height_m <= _LIFT_THRESHOLD_M:
+            # No lift (h<=10m): END_CORE min width ~4.53m -> 4.65m
+            eff_min_width = min(min_width_m, _NO_LIFT_ARCH_MIN_W)
+        elif height_m <= _HIGHRISE_THRESHOLD_M:
+            # 1 staircase + lift (10m < h <= 15m): END_CORE min ~6.26m -> 6.36m
+            eff_min_width = max(min_width_m, _LIFT_ARCH_MIN_W)
+        else:
+            # 2 staircases + lift (h > 15m): END_CORE min ~7.26m -> 7.36m
+            eff_min_width = max(min_width_m, _HIGHRISE_ARCH_MIN_W)
+        eff_min_depth = max(min_depth_m, _ARCH_MIN_DEPTH)
 
         # Envelope for this height (once).
         plot_geom = plot.geom
@@ -436,6 +534,10 @@ def solve_optimal_development_configuration(
             cop_strategy=cop_strategy_normalized,
         )
         if env.status != "VALID" or env.envelope_polygon is None:
+            _env_err = getattr(env, "error_message", "") or env.status
+            _envelope_fail_floors.append(
+                f"floors={floors}(h={height_m:.1f}m):{_env_err[:80]}"
+            )
             if debug:
                 print(
                     f"  -> Envelope: FAIL (status={env.status}, "
@@ -456,15 +558,33 @@ def solve_optimal_development_configuration(
         max_feasible_towers = 0
         placements_by_n: dict[int, object] = {}
 
+        # Extract road edge angles from edge specs for spatial planner
+        _road_edge_angles = []
+        for es in getattr(env, "edge_specs_raw", []):
+            if getattr(es, "edge_type", "") == "ROAD":
+                import math as _m
+                dx = es.p2[0] - es.p1[0]
+                dy = es.p2[1] - es.p1[1]
+                _road_edge_angles.append(_m.degrees(_m.atan2(dy, dx)))
+
         for n in range(1, hard_limit + 1):
             placement = compute_placement(
                 envelope_wkt=envelope_wkt,
                 building_height_m=height_m,
                 n_towers=n,
-                min_width_m=min_width_m,
-                min_depth_m=min_depth_m,
+                min_width_m=eff_min_width,
+                min_depth_m=eff_min_depth,
+                road_edge_angles_deg=_road_edge_angles or None,
+                use_spatial_planner=True,
+                plot_polygon_wkt=plot_geom.wkt,
+                edge_specs=getattr(env, "edge_specs_raw", None),
             )
             if placement.status != "VALID":
+                if n == 1:
+                    _pl_err = getattr(placement, "error_message", "") or placement.status
+                    _placement_fail_floors.append(
+                        f"floors={floors}(h={height_m:.1f}m):{_pl_err[:80]}"
+                    )
                 if debug:
                     print(
                         f"  n_towers={n}: Placement: FAIL "
@@ -506,6 +626,7 @@ def solve_optimal_development_configuration(
                 mode=mode,
             )
             if not rules_ok:
+                _rules_fail_count += 1
                 if debug:
                     print(f"  n_towers={n_towers}: Rules engine: FAIL")
                 continue
@@ -524,6 +645,7 @@ def solve_optimal_development_configuration(
                     break
 
             if not layout_ok:
+                _layout_fail_count += 1
                 if debug:
                     print(f"  n_towers={n_towers}: Layout: FAIL")
                 continue
@@ -533,7 +655,7 @@ def solve_optimal_development_configuration(
             fsi_utilization_pct = float(regulatory.fsi_utilization_pct)
             gc_utilization_pct = float(regulatory.achieved_gc_pct)
 
-            total_bua_sqft = achieved_fsi * float(plot.plot_area_sqft)
+            total_bua_sqft = float(ctx.get("counted_total_bua_sqft") or (achieved_fsi * float(plot.plot_area_sqft)))
             per_tower_footprint_sqft = [
                 float(fp.area_sqft or 0.0) for fp in placement_obj.footprints
             ]
@@ -544,6 +666,15 @@ def solve_optimal_development_configuration(
             )
             cop_strategy_value = getattr(
                 env_obj, "cop_strategy", cop_strategy_normalized
+            )
+
+            premium_breakdown = compute_premium_breakdown(
+                achieved_fsi=achieved_fsi,
+                plot_area_sqm=float(plot.plot_area_sqm),
+                base_fsi=float(regulatory.base_fsi),
+                max_fsi=float(regulatory.max_fsi),
+                corridor_eligible=bool(cached_policy.corridor_eligible) if cached_policy else False,
+                jantri_rate_per_sqm=None,
             )
 
             # Update best solution (FSI primary, floors as implicit tie-break).
@@ -561,6 +692,8 @@ def solve_optimal_development_configuration(
                     controlling_constraint="",  # set after loop
                     cop_strategy=cop_strategy_value,
                     cop_area_sqft=cop_area_sqft,
+                    exclusion_adjusted_bua_sqft=float(ctx.get("counted_total_bua_sqft") or 0.0),
+                    premium_breakdown=premium_breakdown,
                 )
 
             if debug:
@@ -590,7 +723,14 @@ def solve_optimal_development_configuration(
             break
 
     if best_solution is None:
-        return _infeasible_solution()
+        detail = _build_infeasibility_detail(
+            total_floors=_total_floors_tried,
+            envelope_fail_floors=_envelope_fail_floors,
+            placement_fail_floors=_placement_fail_floors,
+            rules_fail_count=_rules_fail_count,
+            layout_fail_count=_layout_fail_count,
+        )
+        return _infeasible_solution(detail)
 
     # Controlling constraint attribution for the chosen configuration.
     #
@@ -607,4 +747,67 @@ def solve_optimal_development_configuration(
 
     best_solution.controlling_constraint = controlling
     return best_solution
+
+
+# ── Infeasibility detail builder ─────────────────────────────────────────────
+
+def _build_infeasibility_detail(
+    *,
+    total_floors: int,
+    envelope_fail_floors: list,
+    placement_fail_floors: list,
+    rules_fail_count: int,
+    layout_fail_count: int,
+) -> str:
+    """
+    Build a concise human-readable string explaining why the optimizer returned
+    no feasible solution.
+
+    Priority: envelope > placement > layout > rules.
+    """
+    n_env = len(envelope_fail_floors)
+    n_pl = len(placement_fail_floors)
+
+    if n_env > 0 and n_env == total_floors:
+        # Every floor failed at envelope — plot geometry too tight for setbacks.
+        sample = envelope_fail_floors[0] if envelope_fail_floors else ""
+        return f"envelope_collapse_all_floors({n_env}/{total_floors}): {sample}"
+
+    if n_env > 0:
+        sample = envelope_fail_floors[0] if envelope_fail_floors else ""
+        suffix = (
+            f"placement_fail({n_pl})"
+            if n_pl > 0
+            else (f"layout_fail({layout_fail_count})" if layout_fail_count else "")
+        )
+        parts = [f"envelope_fail({n_env}/{total_floors}): {sample}"]
+        if suffix:
+            parts.append(suffix)
+        return "; ".join(parts)
+
+    if n_pl > 0 and n_pl == total_floors:
+        sample = placement_fail_floors[0] if placement_fail_floors else ""
+        return f"placement_fail_all_floors({n_pl}/{total_floors}): {sample}"
+
+    if n_pl > 0:
+        sample = placement_fail_floors[0] if placement_fail_floors else ""
+        suffix = f"layout_fail({layout_fail_count})" if layout_fail_count else ""
+        parts = [f"placement_fail({n_pl}/{total_floors}): {sample}"]
+        if suffix:
+            parts.append(suffix)
+        return "; ".join(parts)
+
+    if layout_fail_count > 0:
+        return (
+            f"layout_fail({layout_fail_count} configs)"
+            + (f"; rules_fail({rules_fail_count})" if rules_fail_count else "")
+        )
+
+    if rules_fail_count > 0:
+        return f"rules_fail({rules_fail_count} configs)"
+
+    if total_floors == 0:
+        return "no_floors_in_range"
+
+    return "unknown_infeasibility"
 

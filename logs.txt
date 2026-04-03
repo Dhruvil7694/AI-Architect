@@ -1,0 +1,95 @@
+[29/Mar/2026 21:33:33] "OPTIONS /api/auth/me/ HTTP/1.1" 200 0
+[29/Mar/2026 21:33:33] "GET /api/auth/me/ HTTP/1.1" 200 87
+[29/Mar/2026 21:33:33] "OPTIONS /api/map/tp-bundle/?tp_scheme=TP14&city=Surat HTTP/1.1" 200 0
+[29/Mar/2026 21:33:33] "GET /api/plots/?tp_scheme=TP14&city=Surat HTTP/1.1" 200 69500
+[29/Mar/2026 21:33:33] "GET /api/map/tp-bundle/?tp_scheme=TP14&city=Surat HTTP/1.1" 200 178675
+[29/Mar/2026 21:33:35] "OPTIONS /api/development/site-metrics/TP14-133/ HTTP/1.1" 200 0
+[29/Mar/2026 21:33:35] "OPTIONS /api/development/feasibility/TP14-133/ HTTP/1.1" 200 0
+[29/Mar/2026 21:33:35] "GET /api/development/site-metrics/TP14-133/ HTTP/1.1" 200 164
+[29/Mar/2026 21:33:40] "GET /api/development/feasibility/TP14-133/ HTTP/1.1" 200 3765
+[29/Mar/2026 21:33:51] "OPTIONS /api/development/plan/ HTTP/1.1" 200 0
+[29/Mar/2026 21:33:51] "POST /api/development/plan/ HTTP/1.1" 201 48
+[29/Mar/2026 21:33:51] "OPTIONS /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 200 0
+[29/Mar/2026 21:33:51] "OPTIONS /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 0
+[29/Mar/2026 21:33:51] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:33:51] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+[29/Mar/2026 21:33:52] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+[29/Mar/2026 21:33:52] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:33:54] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+[29/Mar/2026 21:33:54] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:33:55] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+[29/Mar/2026 21:33:55] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+[29/Mar/2026 21:33:57] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:33:57] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+HEIGHT_SOLVER_DEBUG: plot_id=698 road_width_m=60.000 height_from_road_width=70.000 height_from_fsi_limit=63.000 height_from_margin=None height_from_fire_access=None height_from_other_constraints=44.998 final_height=42.000 floors=14 controlling=LAYOUT_LIMIT
+Road edge detection using fallback: longest exterior edge index=19 used as ROAD.
+DEV_CONFIG_DEBUG: plot_area_sqm=39646.639 road_width_m=60.000 max_fsi=4.000 max_bua_sqm=158586.558 max_height_m=42.000 gdcr_max_height_m=70.000 storey_height_m=3.000
+[29/Mar/2026 21:33:59] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:33:59] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+[29/Mar/2026 21:34:00] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:00] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+[29/Mar/2026 21:34:02] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:02] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+AI site plan: validation failed attempt 1:
+- T1: footprint extends outside envelope (only 79% contained). Move center inward or reduce dimensions.
+- T2: footprint extends outside envelope (only 80% contained). Move center inward or reduce dimensions.
+[29/Mar/2026 21:34:04] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:04] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+[29/Mar/2026 21:34:05] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:05] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+AI site plan: validation failed attempt 2:
+- T1: footprint extends outside envelope (only 80% contained). Move center inward or reduce dimensions.
+- T2: footprint extends outside envelope (only 80% contained). Move center inward or reduce dimensions.
+[29/Mar/2026 21:34:07] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:07] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+[29/Mar/2026 21:34:08] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:08] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+[29/Mar/2026 21:34:10] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:10] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+AI site plan: validation failed attempt 3:
+- T1: footprint extends outside envelope (only 81% contained). Move center inward or reduce dimensions.
+- T2: footprint extends outside envelope (only 81% contained). Move center inward or reduce dimensions.
+[29/Mar/2026 21:34:11] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:11] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+[29/Mar/2026 21:34:13] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:13] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+AI site plan: validation failed attempt 4:
+- T1: footprint extends outside envelope (only 85% contained). Move center inward or reduce dimensions.
+- T2: footprint extends outside envelope (only 85% contained). Move center inward or reduce dimensions.
+[29/Mar/2026 21:34:14] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/status/ HTTP/1.1" 200 101
+Conflict: /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/
+[29/Mar/2026 21:34:15] "GET /api/development/plan-jobs/60c35b27-72c7-42aa-a209-1fb5ded80d1d/result/ HTTP/1.1" 409 39
+AI site plan: validation failed attempt 5:
+- T1: footprint extends outside envelope (only 81% contained). Move center inward or reduce dimensions.
+- T2: footprint extends outside envelope (only 81% contained). Move center inward or reduce dimensions.
+AI site plan: all 5 attempts failed, falling back to deterministic.
+TOWER_SEARCH_START: building_height_m=42.000 tower_pref=auto user_max_floors=0 storey_height_m=3.000 max_bua_sqm=158586.558 gdcr_max_height_m=70.000

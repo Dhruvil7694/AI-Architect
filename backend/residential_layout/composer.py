@@ -128,28 +128,43 @@ def compose_unit(
         d_back_strip = max(d_toilet, d_kitchen)
         w_toilet = template.room("TOILET").min_width_m
         w_kitchen = template.room("KITCHEN").min_width_m
-        required_depth = d_living + d_bed + d_back_strip
+        base_required_depth = d_living + d_bed + d_back_strip
     else:
         # STUDIO
         d_toilet = template.room("TOILET").min_depth_m
-        required_depth = d_living + d_toilet
+        base_required_depth = d_living + d_toilet
         w_toilet = template.room("TOILET").min_width_m
         w_kitchen = 0.0
         d_bed = 0.0
         d_back_strip = d_toilet
 
-    # 1. Depth budget
-    if required_depth > band_depth_m:
+    # 1. Base depth budget (must fit core template without passage).
+    if base_required_depth > band_depth_m:
         raise UnitZoneTooSmallError(
-            f"Depth budget: required_depth={required_depth} > band_depth_m={band_depth_m}",
+            f"Depth budget: required_depth={base_required_depth} > band_depth_m={band_depth_m}",
             template_name=template.name,
             which="depth",
         )
 
-    # 2. Width budget (TOILET + KITCHEN for 1BHK; TOILET only for STUDIO)
-    if w_toilet + w_kitchen > band_length_m:
+    # 2. Side corridor width: allocate a PASSAGE band along width when possible.
+    passage_width_m = 0.0
+    # Compute minimum room-side width required by template.
+    min_room_width = template.room("LIVING").min_width_m
+    if "BEDROOM" in template.room_templates:
+        min_room_width = max(min_room_width, template.room("BEDROOM").min_width_m)
+    min_room_width = max(min_room_width, w_toilet + w_kitchen)
+
+    max_passage_width = band_length_m - min_room_width
+    if max_passage_width >= 1.0 and "BEDROOM" in template.room_templates:
+        # Aim for 1.0–1.2 m passage; cap by available slack.
+        passage_width_m = min(1.2, max_passage_width)
+
+    room_zone_width_m = band_length_m - passage_width_m
+
+    # 3. Width budget (TOILET + KITCHEN for 1BHK; TOILET only for STUDIO) in ROOM_ZONE.
+    if w_toilet + w_kitchen > room_zone_width_m:
         raise LayoutCompositionError(
-            f"Width budget: w_toilet + w_kitchen = {w_toilet + w_kitchen} > band_length_m = {band_length_m}",
+            f"Width budget: w_toilet + w_kitchen = {w_toilet + w_kitchen} > room_zone_width_m = {room_zone_width_m}",
             reason_code="width_budget_fail",
             template_name=template.name,
         )
@@ -159,13 +174,31 @@ def compose_unit(
     # Depth layout: 0 = core (wet wall), band_depth_m = frontage (entry).
     # Back strip at 0..d_back_strip, then BEDROOM, then LIVING at frontage.
     depth_back_end = d_back_strip
-    depth_bed_end = d_back_strip + d_bed
+    depth_bed_end = depth_back_end + d_bed
 
-    # 3. TOILET (back strip, on wet wall at depth 0)
+    # 3. PASSAGE (side corridor running full depth along one side)
+    passage_poly = None
+    if passage_width_m > 0.0:
+        passage_poly = _rect_to_polygon(
+            frame,
+            0.0,
+            passage_width_m,
+            0.0,
+            band_depth_m,
+        )
+        rooms.append(
+            RoomInstance(room_type="PASSAGE", polygon=passage_poly, area_sqm=passage_poly.area)
+        )
+
+    # Coordinate helpers for ROOM_ZONE (rooms sit to the right of passage).
+    band_start_rooms = passage_width_m
+    band_end_rooms = band_length_m
+
+    # 4. TOILET (back strip, on wet wall at depth 0, inside ROOM_ZONE)
     toilet_poly = _rect_to_polygon(
         frame,
-        0.0,
-        w_toilet,
+        band_start_rooms,
+        band_start_rooms + w_toilet,
         0.0,
         depth_back_end,
     )
@@ -173,12 +206,12 @@ def compose_unit(
         RoomInstance(room_type="TOILET", polygon=toilet_poly, area_sqm=toilet_poly.area)
     )
 
-    # 4. KITCHEN (1BHK only, back strip)
+    # 5. KITCHEN (1BHK only, back strip)
     if "KITCHEN" in template.room_templates:
         kitchen_poly = _rect_to_polygon(
             frame,
-            w_toilet,
-            w_toilet + w_kitchen,
+            band_start_rooms + w_toilet,
+            band_start_rooms + w_toilet + w_kitchen,
             0.0,
             depth_back_end,
         )
@@ -190,12 +223,12 @@ def compose_unit(
             )
         )
 
-    # 5. BEDROOM (1BHK only)
+    # 6. BEDROOM (1BHK only)
     if "BEDROOM" in template.room_templates:
         bed_poly = _rect_to_polygon(
             frame,
-            0.0,
-            band_length_m,
+            band_start_rooms,
+            band_end_rooms,
             depth_back_end,
             depth_bed_end,
         )
@@ -203,36 +236,36 @@ def compose_unit(
             RoomInstance(room_type="BEDROOM", polygon=bed_poly, area_sqm=bed_poly.area)
         )
 
-    # 6. LIVING (frontage, entry side at depth = band_depth_m)
+    # 7. LIVING (frontage, entry side at depth = band_depth_m, inside ROOM_ZONE)
     living_poly = _rect_to_polygon(
         frame,
-        0.0,
-        band_length_m,
+        band_start_rooms,
+        band_end_rooms,
         depth_bed_end,
         band_depth_m,
     )
     living_area = living_poly.area
     rooms.append(RoomInstance(room_type="LIVING", polygon=living_poly, area_sqm=living_area))
 
-    # 7. Entry door: centred on LIVING front edge (depth=band_depth_m), length = door_width_m
+    # 8. Entry door: centred on LIVING front edge (depth=band_depth_m), length = door_width_m
     door_width_m = template.door_width_m
     half = door_width_m / 2.0
-    mid_band = band_length_m / 2.0
-    b0 = max(0.0, mid_band - half)
-    b1 = min(band_length_m, mid_band + half)
+    mid_band = (band_start_rooms + band_end_rooms) / 2.0
+    b0 = max(band_start_rooms, mid_band - half)
+    b1 = min(band_end_rooms, mid_band + half)
     entry_door_segment = _segment_to_world(frame, b0, band_depth_m, b1, band_depth_m)
 
-    # 8. Validate dimensions (min width/depth and min area after rectangle construction)
+    # 9. Validate dimensions (min width/depth and min area after rectangle construction)
     if "BEDROOM" in template.room_templates:
         dims = [
-            ("LIVING", band_length_m, d_living),
-            ("BEDROOM", band_length_m, d_bed),
+            ("LIVING", room_zone_width_m, d_living),
+            ("BEDROOM", room_zone_width_m, d_bed),
             ("TOILET", w_toilet, d_back_strip),
             ("KITCHEN", w_kitchen, d_back_strip),
         ]
     else:
         dims = [
-            ("LIVING", band_length_m, d_living),
+            ("LIVING", room_zone_width_m, d_living),
             ("TOILET", w_toilet, d_back_strip),
         ]
     for rtype, w_design, d_design in dims:
@@ -245,6 +278,9 @@ def compose_unit(
                 room_type=rtype,
             )
     for ri in rooms:
+        # PASSAGE has no template constraints; treat it as circulation only.
+        if ri.room_type == "PASSAGE":
+            continue
         rt = template.room(ri.room_type)
         if rt.min_area_sqm is not None and ri.area_sqm < rt.min_area_sqm - _TOL:
             raise LayoutCompositionError(
@@ -254,7 +290,8 @@ def compose_unit(
                 room_type=ri.room_type,
             )
 
-    # 9. Connectivity: LIVING touches entry edge; every other room touches LIVING or BEDROOM (or entry)
+    # 10. Connectivity: LIVING touches entry edge; every other room touches
+    # LIVING, BEDROOM, PASSAGE, or entry edge.
     entry_edge_poly = Polygon([
         _band_depth_to_world(frame, 0.0, band_depth_m),
         _band_depth_to_world(frame, band_length_m, band_depth_m),
@@ -263,6 +300,7 @@ def compose_unit(
     ])
     living_poly_ref = next(r.polygon for r in rooms if r.room_type == "LIVING")
     bed_poly_ref = next((r.polygon for r in rooms if r.room_type == "BEDROOM"), None)
+    passage_poly_ref = next((r.polygon for r in rooms if r.room_type == "PASSAGE"), None)
     living_entry = _shared_boundary_length(living_poly_ref, entry_edge_poly)
     if living_entry < _TOL:
         raise LayoutCompositionError(
@@ -276,8 +314,14 @@ def compose_unit(
             continue
         with_living = _shared_boundary_length(ri.polygon, living_poly_ref)
         with_bed = _shared_boundary_length(ri.polygon, bed_poly_ref) if bed_poly_ref else 0.0
+        with_passage = _shared_boundary_length(ri.polygon, passage_poly_ref) if passage_poly_ref else 0.0
         with_entry = _shared_boundary_length(ri.polygon, entry_edge_poly)
-        if with_living < _TOL and with_bed < _TOL and with_entry < _TOL:
+        if (
+            with_living < _TOL
+            and with_bed < _TOL
+            and with_passage < _TOL
+            and with_entry < _TOL
+        ):
             raise LayoutCompositionError(
                 f"Room {ri.room_type} does not touch LIVING, BEDROOM, or entry edge",
                 reason_code="connectivity_fail",
@@ -285,7 +329,7 @@ def compose_unit(
                 room_type=ri.room_type,
             )
 
-    # 10. Wet wall alignment: TOILET and KITCHEN have edge on wet_wall_line
+    # 11. Wet wall alignment: TOILET and KITCHEN have edge on wet_wall_line
     for ri in rooms:
         if ri.room_type in ("TOILET", "KITCHEN"):
             if not _edge_on_wet_line(ri.polygon, frame.wet_wall_line):
@@ -296,7 +340,7 @@ def compose_unit(
                     room_type=ri.room_type,
                 )
 
-    # All rooms inside zone (with small tolerance)
+    # 12. All rooms inside zone (with small tolerance)
     zone_poly = zone.polygon
     zone_buf = zone_poly.buffer(_TOL)
     for ri in rooms:
@@ -308,9 +352,12 @@ def compose_unit(
                 room_type=ri.room_type,
             )
 
-    # Output order: LIVING, BEDROOM, TOILET, KITCHEN (plan room_templates order)
-    order = ["LIVING", "BEDROOM", "TOILET", "KITCHEN"] if "BEDROOM" in template.room_templates else ["LIVING", "TOILET"]
-    ordered_rooms = [next(r for r in rooms if r.room_type == t) for t in order]
+    # Output order: keep canonical order for presentation.
+    if "BEDROOM" in template.room_templates:
+        order = ["LIVING", "PASSAGE", "BEDROOM", "TOILET", "KITCHEN"]
+    else:
+        order = ["LIVING", "TOILET"]
+    ordered_rooms = [next(r for r in rooms if r.room_type == t) for t in order if any(r.room_type == t for r in rooms)]
 
     return UnitLayoutContract(
         rooms=ordered_rooms,

@@ -30,7 +30,10 @@ from placement_engine.geometry import (
     MIN_FOOTPRINT_AREA_SQFT,
     FootprintCandidate,
 )
-from placement_engine.geometry.inscribed_rectangle import find_best_inscribed_rect
+from placement_engine.geometry.inscribed_rectangle import (
+    find_best_inscribed_rect,
+    find_top_n_inscribed_rects,
+)
 
 
 def extract_components(
@@ -71,6 +74,55 @@ def extract_components(
     valid.sort(key=lambda g: (-g.area, g.centroid.x))
 
     return valid[:MAX_COMPONENTS]
+
+
+def find_top_n_in_components(
+    geom:          BaseGeometry,
+    min_width_dxf: float,
+    min_depth_dxf: float,
+    force_angle:   Optional[float] = None,
+    min_area_sqft: float = MIN_FOOTPRINT_AREA_SQFT,
+    n:             int = 10,
+) -> list[FootprintCandidate]:
+    """
+    Return up to *n* candidates across all valid components, sorted by area.
+
+    Each component is evaluated with find_top_n_inscribed_rects.  All
+    candidates from all components are pooled, sorted by area descending, and
+    the top-N returned.  The scoring layer (placement_scorer.select_best_candidate)
+    then applies heuristic ranking to choose the architecturally best one.
+
+    Parameters
+    ----------
+    geom          : Any Shapely geometry (Polygon, MultiPolygon, or collection).
+    min_width_dxf : Minimum footprint width (DXF feet).
+    min_depth_dxf : Minimum footprint depth (DXF feet).
+    force_angle   : If given, only test this angle per component.
+    min_area_sqft : Sliver filter threshold.
+    n             : Maximum candidates to return.
+
+    Returns
+    -------
+    List of FootprintCandidate sorted by area descending, capped at *n*.
+    """
+    components = extract_components(geom, min_area_sqft)
+    if not components:
+        return []
+
+    all_candidates: list[FootprintCandidate] = []
+    for idx, component in enumerate(components):
+        for c in find_top_n_inscribed_rects(
+            polygon=component,
+            min_width_dxf=min_width_dxf,
+            min_depth_dxf=min_depth_dxf,
+            n=n,
+            force_angle=force_angle,
+        ):
+            c.source_component_index = idx
+            all_candidates.append(c)
+
+    all_candidates.sort(key=lambda c: -c.area_sqft)
+    return all_candidates[:n]
 
 
 def find_best_in_components(

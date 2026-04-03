@@ -28,8 +28,14 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
 
+import numpy as np
 from shapely.geometry import Point, Polygon
 from shapely.strtree import STRtree
+
+
+def _make_strtree(polygons: list) -> STRtree:
+    """Build an STRtree compatible with both Shapely 1.x and 2.x."""
+    return STRtree(np.array(polygons, dtype=object))
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +46,7 @@ class MatchedPlot:
 
     fp_number: str
     polygon: Polygon
+    label_point: Point
     match_method: str  # "contains" | "nearest" | "conflict-resolved"
 
 
@@ -67,7 +74,7 @@ def match_fp_to_polygons(
         logger.warning("No polygons or labels provided — nothing to match.")
         return [], [lbl for lbl, _ in labels]
 
-    tree = STRtree(polygons)
+    tree = _make_strtree(polygons)
 
     # ── Pass 1: containment + nearest-neighbour ──────────────────────────────
     # polygon_index (int) → list of (fp_text, point, distance_to_centroid)
@@ -91,91 +98,142 @@ def match_fp_to_polygons(
     # ── Pass 2: conflict resolution ──────────────────────────────────────────
     # For each polygon with multiple claimants, the one closest to the centroid
     # wins; displaced labels enter a retry queue.
-    assigned: Dict[int, str] = {}          # poly_idx → winning fp_text
+    assigned: Dict[int, Tuple[str, Point, str]] = {}  # poly_idx → (fp_text, point, method)
     retry_queue: List[Tuple[str, Point]] = []
 
     for poly_idx, claimants in claims.items():
         if len(claimants) == 1:
-            fp_text, _, _ = claimants[0]
-            assigned[poly_idx] = fp_text
-        else:
-            # Priority: numeric FP labels (pure integers or "n/n" format) beat
-            # non-numeric description labels (GARDEN, S.E.W.S.H, etc.).
-            # Within each priority tier, the label closest to the centroid wins.
-            claimants_sorted = sorted(
-                claimants,
-                key=lambda c: (0 if _is_fp_number(c[0]) else 1, c[2]),
+            fp_text, point, _dist = claimants[0]
+            method = (
+                "contains" if polygons[poly_idx].covers(point) else "nearest"
             )
-            winner_text, _, _ = claimants_sorted[0]
-            assigned[poly_idx] = winner_text
-            for fp_text, point, _ in claimants_sorted[1:]:
-                logger.debug(
-                    "Conflict: '%s' displaced from polygon (area=%.1f) by '%s'. "
-                    "Queuing for retry.",
-                    fp_text, polygons[poly_idx].area, winner_text,
-                )
-                retry_queue.append((fp_text, point))
+            assigned[poly_idx] = (fp_text, point, method)
+            continue
+
+        # Priority: numeric FP labels beat description labels.
+        claimants_sorted = sorted(
+            claimants,
+            key=lambda c: (0 if _is_fp_number(c[0]) else 1, c[2]),
+        )
+        winner_text, winner_point, _ = claimants_sorted[0]
+        assigned[poly_idx] = (winner_text, winner_point, "conflict-resolved")
+
+        for displaced_fp_text, displaced_point, _dist in claimants_sorted[1:]:
+            retry_queue.append((displaced_fp_text, displaced_point))
 
     # ── Pass 3: retry displaced labels against unassigned polygons ───────────
     taken_indices: Set[int] = set(assigned.keys())
-    unassigned_polys = [
-        (i, p) for i, p in enumerate(polygons) if i not in taken_indices
-    ]
+    unassigned_polygon_indices = [i for i in range(len(polygons)) if i not in taken_indices]
     unmatched: List[str] = []
 
-    if unassigned_polys and retry_queue:
-        retry_polys = [p for _, p in unassigned_polys]
-        retry_tree = STRtree(retry_polys)
-        retry_idx_map = {j: i for j, (i, _) in enumerate(unassigned_polys)}
+    # PASS 3 (numeric-only, distance-sorted greedy):
+    # Build candidate polygons for each displaced numeric label against the
+    # currently unassigned polygons. Then assign in order of best (smallest)
+    # centroid distance to avoid starving a label with a later, worse match.
+    retry_numeric = [(fp_text, point) for fp_text, point in retry_queue if _is_fp_number(fp_text)]
+    if retry_numeric and unassigned_polygon_indices:
+        unassigned_polys = [polygons[i] for i in unassigned_polygon_indices]
+        retry_tree = _make_strtree(unassigned_polys)
+        local_to_global = {j: g for j, g in enumerate(unassigned_polygon_indices)}
+        expanded_tol = snap_tolerance * 5
 
-        for fp_text, point in retry_queue:
-            local_idx = _find_containing(point, retry_polys, retry_tree)
-            if local_idx is None:
-                local_idx = _find_nearest(point, retry_polys, retry_tree, snap_tolerance * 5)
+        # For each label, compute sorted candidate globals (closest centroid first).
+        per_label_candidates: List[Tuple[str, Point, List[int]]] = []
+        for fp_text, point in retry_numeric:
+            # Containment first if possible, but still allow nearest candidates.
+            contain_local = [
+                idx
+                for idx in retry_tree.query(point)
+                if unassigned_polys[idx].covers(point)
+            ]
 
-            if local_idx is not None:
-                global_idx = retry_idx_map[local_idx]
-                assigned[global_idx] = fp_text
-                taken_indices.add(global_idx)
-                # remove from unassigned so it can't be claimed again
-                unassigned_polys = [(i, p) for i, p in unassigned_polys if i != global_idx]
-                logger.debug("Retry success: '%s' → polygon idx %d", fp_text, global_idx)
+            candidates_local: List[int] = []
+            if contain_local:
+                candidates_local = contain_local
             else:
-                logger.warning("FP %s could not be matched to any polygon.", fp_text)
+                nearby_local = list(retry_tree.query(point.buffer(expanded_tol)))
+                # filter by centroid-distance threshold
+                candidates_local = [
+                    idx
+                    for idx in nearby_local
+                    if point.distance(unassigned_polys[idx].centroid) <= expanded_tol
+                ]
+
+            if not candidates_local:
+                continue
+
+            candidates_sorted = sorted(
+                candidates_local,
+                key=lambda idx: point.distance(unassigned_polys[idx].centroid),
+            )
+            candidate_globals = [local_to_global[idx] for idx in candidates_sorted]
+            per_label_candidates.append((fp_text, point, candidate_globals))
+
+        # Sort labels by their best candidate distance.
+        def best_dist(item: Tuple[str, Point, List[int]]) -> float:
+            fp_text, point, globals_list = item
+            best_global = globals_list[0]
+            return point.distance(polygons[best_global].centroid)
+
+        per_label_candidates.sort(key=best_dist)
+
+        taken_in_pass3: Set[int] = set()
+        for fp_text, point, candidate_globals in per_label_candidates:
+            # pick first candidate polygon not already taken
+            chosen: int | None = None
+            for gidx in candidate_globals:
+                if gidx in taken_in_pass3:
+                    continue
+                chosen = gidx
+                break
+            if chosen is None:
                 unmatched.append(fp_text)
-    else:
-        for fp_text, _ in retry_queue:
-            logger.warning("FP %s could not be matched (no unassigned polygons left).", fp_text)
+                continue
+
+            # Finalize assignment
+            method = (
+                "conflict-resolved"
+                if polygons[chosen].covers(point)
+                else "nearest"
+            )
+            assigned[chosen] = (fp_text, point, method)
+            taken_indices.add(chosen)
+            taken_in_pass3.add(chosen)
+
+        # Any displaced labels that didn't produce candidates are unmatched.
+        matched_fp_set = {fp for fp, _pt, _cand in per_label_candidates}
+        for fp_text, _point in retry_numeric:
+            if fp_text not in matched_fp_set:
+                unmatched.append(fp_text)
+    # Non-numeric displaced labels are treated as unmatched; they are not needed
+    # to map FP numbers to Plot polygons.
+    for fp_text, _point in retry_queue:
+        if not _is_fp_number(fp_text):
             unmatched.append(fp_text)
 
     # Add original no-match labels
-    for fp_text, _ in no_match:
+    for fp_text, _point in no_match:
         logger.warning("FP %s could not be matched to any polygon.", fp_text)
         unmatched.append(fp_text)
 
     # ── Build result ─────────────────────────────────────────────────────────
     matched: List[MatchedPlot] = []
-    original_claim_map: Dict[str, int] = {}
-    for poly_idx, claimants in claims.items():
-        for fp_text, _, _ in claimants:
-            original_claim_map[fp_text] = poly_idx
-
-    for poly_idx, fp_text in assigned.items():
-        original_idx = original_claim_map.get(fp_text)
-        if original_idx == poly_idx:
-            method = "contains" if _point_inside(
-                next(pt for t, pt, _ in claims[poly_idx] if t == fp_text),
-                polygons[poly_idx],
-            ) else "nearest"
-        else:
-            method = "conflict-resolved"
-        matched.append(MatchedPlot(fp_number=fp_text, polygon=polygons[poly_idx], match_method=method))
+    for poly_idx, (fp_text, point, method) in assigned.items():
+        matched.append(
+            MatchedPlot(
+                fp_number=fp_text,
+                polygon=polygons[poly_idx],
+                label_point=point,
+                match_method=method,
+            )
+        )
 
     logger.info(
-        "Matching complete: %d matched (%d after conflict resolution), "
-        "%d unmatched out of %d labels",
-        len(matched), len([m for m in matched if m.match_method == "conflict-resolved"]),
-        len(unmatched), len(labels),
+        "Matching complete: %d matched (%d after conflict resolution), %d unmatched out of %d labels",
+        len(matched),
+        len([m for m in matched if m.match_method == "conflict-resolved"]),
+        len(unmatched),
+        len(labels),
     )
     return matched, unmatched
 
@@ -185,10 +243,35 @@ def match_fp_to_polygons(
 def _find_containing(
     point: Point, polygons: List[Polygon], tree: STRtree
 ) -> Optional[int]:
-    """Return the index of the first polygon that contains point, or None."""
-    for idx in tree.query(point):
-        if polygons[idx].contains(point):
-            return idx
+    """
+    Return the best polygon for the label point among polygons that contain
+    or cover the point.
+
+    Important: for boundary points, `contains()` may fail, while `covers()`
+    will succeed. We prefer `contains()` first, and for either case choose
+    the polygon whose centroid is closest to the label point.
+    """
+    contains_candidates: list[int] = []
+    cover_candidates: list[int] = []
+    near_boundary: list[int] = []  # within 1 DXF unit of boundary
+
+    for idx in tree.query(point.buffer(1.0)):
+        poly = polygons[idx]
+        if poly.contains(point):
+            contains_candidates.append(idx)
+        elif poly.covers(point):
+            cover_candidates.append(idx)
+        elif poly.distance(point) < 1.0:
+            near_boundary.append(idx)
+
+    # Merge all candidates, preferring smallest polygon.
+    # A label sitting 0.2 units outside a 1500 sqft polygon is almost
+    # certainly meant for that polygon, not the 5800 sqft block that
+    # technically contains it.
+    all_candidates = contains_candidates + cover_candidates + near_boundary
+    if all_candidates:
+        return min(all_candidates, key=lambda i: polygons[i].area)
+
     return None
 
 
@@ -196,12 +279,22 @@ def _find_nearest(
     point: Point, polygons: List[Polygon], tree: STRtree, tolerance: float
 ) -> Optional[int]:
     """Return the index of the nearest polygon within tolerance, or None."""
-    idx = tree.nearest(point)
-    if idx is None:
+    # Shapely STRtree.nearest() returns nearest boundary distance; we want nearest centroid
+    # for stable FP mapping, and only within the snap tolerance.
+    candidate_idxs = list(tree.query(point.buffer(tolerance)))
+    if not candidate_idxs:
         return None
-    if point.distance(polygons[idx]) <= tolerance:
-        return idx
-    return None
+
+    best_idx: Optional[int] = None
+    best_dist = float("inf")
+    for idx in candidate_idxs:
+        centroid = polygons[idx].centroid
+        dist = point.distance(centroid)
+        if dist <= tolerance and dist < best_dist:
+            best_dist = dist
+            best_idx = idx
+
+    return best_idx
 
 
 def _point_inside(point: Point, polygon: Polygon) -> bool:

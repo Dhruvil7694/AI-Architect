@@ -198,11 +198,35 @@ export function PlanningMetricsPanel() {
 
   const hasUtil = fsiUtil !== null || gcUtil !== null || htUtil !== null;
 
+  const generationSource = (metrics.generationSource as string) || null;
+
   return (
     <div className="flex flex-col gap-6 rounded-xl border border-neutral-200 bg-white p-4 font-sans shadow-sm">
-      <h3 className="text-sm font-semibold text-neutral-900 border-b border-neutral-100 pb-2">
-        Planning Metrics
-      </h3>
+      <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+        <h3 className="text-sm font-semibold text-neutral-900">
+          Planning Metrics
+        </h3>
+        {generationSource && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+              generationSource === "ai"
+                ? "bg-violet-100 text-violet-700"
+                : "bg-neutral-100 text-neutral-600"
+            }`}
+          >
+            {generationSource === "ai" ? (
+              <>
+                <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 1a1 1 0 0 1 1 1v2.07A5.001 5.001 0 0 1 13 9a5 5 0 0 1-10 0 5.001 5.001 0 0 1 4-4.93V2a1 1 0 0 1 1-1zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+                </svg>
+                AI-Generated
+              </>
+            ) : (
+              "Algorithmic"
+            )}
+          </span>
+        )}
+      </div>
 
       {/* ① Regulatory Limits */}
       <Section title="Regulatory Limits">
@@ -210,7 +234,7 @@ export function PlanningMetricsPanel() {
           label="Plot Area"
           value={plotAreaSqm !== null ? `${Math.round(plotAreaSqm)} m²` : "—"}
         />
-        <Row label="Road Width"  value={v(roadWidthM, " m")} />
+        <Row label="Approach Road"  value={v(roadWidthM, " m")} />
         <Row label="Max FSI"     value={v(maxFSI, "", 1)} />
         <Row
           label="Max BUA"

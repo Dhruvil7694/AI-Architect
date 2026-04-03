@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from common.units import sqft_to_sqm
+from common.units import dxf_plane_area_to_sqm
 
 
 @dataclass
@@ -53,7 +53,7 @@ def build_buildability_metrics(
     """Build BuildabilityMetrics from pipeline outputs (no heavy computation)."""
     return BuildabilityMetrics(
         envelope_area_sqft=envelope_area_sqft,
-        envelope_area_sqm=sqft_to_sqm(envelope_area_sqft),
+        envelope_area_sqm=dxf_plane_area_to_sqm(envelope_area_sqft),
         footprint_width_m=footprint_width_m,
         footprint_depth_m=footprint_depth_m,
         footprint_area_sqft=footprint_area_sqft,

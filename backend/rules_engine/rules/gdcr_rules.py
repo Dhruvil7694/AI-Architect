@@ -28,6 +28,7 @@ from rules_engine.rules.base import (
 )
 from rules_engine.rules.loader import get_gdcr_config
 from common.units import sqft_to_sqm
+from architecture.regulatory.fsi_policy import resolve_fsi_policy
 
 
 def _missing(rule: Rule, key: str) -> RuleResult:
@@ -45,6 +46,24 @@ def _result(rule: Rule, status: str, required=None, actual=None,
         description=rule.description, status=status,
         required_value=required, actual_value=actual, unit=unit, note=note,
     )
+
+
+def _resolve_applicable_fsi_cap(inputs: dict, fsi_cfg: dict) -> float:
+    rw = inputs.get("road_width")
+    if rw is None:
+        return float(fsi_cfg.get("base_fsi", 1.8))
+    try:
+        decision = resolve_fsi_policy(
+            plot=None,
+            road_width_m=float(rw),
+            authority_override=inputs.get("authority"),
+            zone_override=inputs.get("zone"),
+            distance_to_wide_road_m=inputs.get("distance_to_wide_road"),
+        )
+        return float(decision.max_fsi)
+    except Exception:
+        base_fsi = float(fsi_cfg.get("base_fsi", 1.8))
+        return float(fsi_cfg.get("maximum_fsi", base_fsi))
 
 
 # ── GDCR evaluators ───────────────────────────────────────────────────────────
@@ -83,25 +102,7 @@ def evaluate_gdcr_fsi_base(inputs: dict, rule: Rule) -> RuleResult:
     fsi_cfg = gdcr.get("fsi_rules", {}) or {}
     base_fsi = float(fsi_cfg.get("base_fsi", 1.8))
 
-    # Determine applicable max FSI (corridor-aware, same logic as fsi.max)
-    tiers = fsi_cfg.get("premium_tiers") or []
-    corridor_rule = fsi_cfg.get("corridor_rule") or {}
-    eligible_if = corridor_rule.get("eligible_if") or {}
-    road_width_min = float(eligible_if.get("road_width_min_m", 36.0))
-    rw = inputs.get("road_width")
-    corridor_eligible = rw is not None and float(rw) >= road_width_min
-    if tiers:
-        try:
-            highest_cap = max(float(t.get("resulting_cap", 0.0)) for t in tiers)
-        except Exception:
-            highest_cap = base_fsi
-        try:
-            first_cap = float(tiers[0].get("resulting_cap", 0.0))
-        except Exception:
-            first_cap = highest_cap
-        applicable_max_fsi = highest_cap if corridor_eligible else first_cap
-    else:
-        applicable_max_fsi = float(fsi_cfg.get("maximum_fsi", base_fsi))
+    applicable_max_fsi = _resolve_applicable_fsi_cap(inputs, fsi_cfg)
 
     pa  = inputs.get("plot_area")
     bua = inputs.get("total_bua")
@@ -143,28 +144,7 @@ def evaluate_gdcr_fsi_max(inputs: dict, rule: Rule) -> RuleResult:
     # Compute achieved FSI once (dimensionless).
     actual_fsi = round(bua / pa, 4) if pa > 0 else 0.0
 
-    # Dynamic cap from premium_tiers + corridor_rule when present.
-    tiers = fsi_cfg.get("premium_tiers") or []
-    corridor_rule = fsi_cfg.get("corridor_rule") or {}
-    eligible_if = corridor_rule.get("eligible_if") or {}
-
-    rw = inputs.get("road_width")
-    road_width_min = float(eligible_if.get("road_width_min_m", 36.0))
-    corridor_eligible = rw is not None and float(rw) >= road_width_min
-
-    max_fsi: float
-    if tiers:
-        try:
-            highest_cap = max(float(t.get("resulting_cap", 0.0)) for t in tiers)
-        except Exception:
-            highest_cap = 0.0
-        try:
-            first_cap = float(tiers[0].get("resulting_cap", 0.0))
-        except Exception:
-            first_cap = highest_cap
-        max_fsi = highest_cap if corridor_eligible else first_cap
-    else:
-        max_fsi = float(fsi_cfg.get("maximum_fsi", 2.7))
+    max_fsi = _resolve_applicable_fsi_cap(inputs, fsi_cfg)
 
     status = PASS if actual_fsi <= max_fsi else FAIL
     return _result(
@@ -423,6 +403,19 @@ def evaluate_gdcr_margin_side_rear(inputs: dict, rule: Rule) -> RuleResult:
             break
     if required_margin is None:
         required_margin = margin_map[-1]["side"]
+
+    # Table 6.26 note:
+    # For "other than dwelling 1-2 and industrial", if Plot Size <= 750 sq.m
+    # and building height <= 25 m, required side/rear margins are 3.0 m.
+    # inputs.plot_area is in sq.ft in this project.
+    pa_sqft = inputs.get("plot_area")
+    if pa_sqft is not None:
+        try:
+            pa_sqm = sqft_to_sqm(float(pa_sqft))
+            if pa_sqm <= 750.0 and float(bh) <= 25.0:
+                required_margin = min(float(required_margin), 3.0)
+        except (TypeError, ValueError):
+            pass
 
     # If actual side/rear margins were provided, validate; otherwise report INFO
     side = inputs.get("side_margin")

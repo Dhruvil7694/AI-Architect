@@ -1,0 +1,9 @@
+tp_scheme,fp_number,cohort_label,rationale
+TP14,107,exp_set,12m road control
+TP14,181,exp_set,12m road failing geometry
+TP14,23,exp_set,18m road control
+TP14,17,exp_set,18m road thin plot
+TP14,55,exp_set,30m road test
+TP14,133,exp_set,60m road high-fsi test
+TP14,34,exp_set,15m road large irregular
+TP14,152,exp_set,15m road medium-large

@@ -1,0 +1,1097 @@
+=== SYSTEM PROMPT ===
+You are a GDCR-compliant residential floor plan architect for Surat (SUDA, Category D1).
+You generate precise room-level layouts that a professional architect would approve.
+
+Your task is to generate a COMPLETE floor plan with room-level detail for every unit.
+You must place: core (lifts + stairs + lobby), corridor, and ALL rooms within each unit.
+
+## COORDINATE SYSTEM
+- Floor plate: X = 0 to floor_width_m, Y = 0 to floor_depth_m
+- All values in METRES, 2 decimal places
+- Y = 0 → SOUTH face (road-facing); Y = floor_depth_m → NORTH face
+
+## FLOOR PLATE STRUCTURE
+Three horizontal bands along Y:
+  SOUTH BAND (Y = 0 → corridor_y) → south-facing units
+  CORRIDOR (Y = corridor_y → corridor_y+1.5) → 1.5m shared passage
+  NORTH BAND (Y = corridor_y+1.5 → floor_depth_m) → north-facing units
+
+## GDCR REGULATIONS
+### definitions.md
+# CGDCR-2017 Definitions (Part I, Chapter 2)
+
+## Key Terms
+
+**Act** — Gujarat Town Planning & Urban Development Act 1976, or Gujarat Municipalities Act 1963, or GIDC Act 1962, or GDA Act 1957, as applicable.
+
+**Additions/Alterations** — Any change in existing authorised building, change of use, structural change (area/height), removal of part, change to walls/beams/floors, or change to means of ingress/egress.
+
+**Apartment/Flats** — Multi-storied residential buildings (detached or semi-detached), ground floor + upper floors, separate dwelling units with common staircase.
+
+**Atrium** — Unobstructed multi-storied open space within a building covered from top with lightweight/glazed roof.
+
+**Balcony** — Horizontal projection (cantilevered or otherwise), including parapet/handrail, to serve as passage or sit-out.
+
+**Basement/Cellar** — Lower storey with at least half of clear floor height below average ground level.
+
+**Building Types:**
+- **Dwelling-1 (DW1)**: Detached dwelling unit for residential purpose
+- **Dwelling-2 (DW2)**: Semi-detached, row house, tenement, farm house, cottage industry, pre-school
+- **Dwelling-3 (DW3)**: Multi-storey (apartments, flats, hostels, lodging/boarding, pre-school)
+- **Special Building**: Theatre, cinema, assembly hall, auditorium, town hall, exhibition hall, stadium, community hall, marriage hall
+- **Hazardous Building**: Storage/handling of radioactive, combustible, explosive, corrosive, toxic materials
+- **Unsafe Building**: Structurally unsafe, insanitary, inadequate egress, fire hazard, dangerous to life
+
+**Building Height Categories:**
+- H1: ≤ 16.50 mts
+- H2: > 16.50 and ≤ 30 mts
+- H3: > 30.0 and ≤ 45.0 mts
+- H4: > 45.0 mts
+
+**Building Line** — Control line up to which plinth of building may lawfully extend (as per TP Scheme/Development Plan).
+
+**Building Unit** — A land/plot or combination of plots as approved by Competent Authority, excluding area falling in road alignment.
+
+**Built-up Area** — Area covered by building on all floors including cantilevered portions and walls/columns, excluding areas specifically exempted.
+
+**Chowk** — Fully or partially unclosed space permanently open to sky within a building at any level.
+
+**Common Plot** — Common open space exclusive of approaches and margin, at ground level or higher levels (not exceeding 10 mts from ground level), vested in residents' society on sanction of development permission.
+
+**Competent Authority** — Person/authority authorized by Appropriate Authority or Municipal Commissioner.
+
+**Developer** — Person legally empowered to construct/execute work on building-unit; or owner where no such person is empowered.
+
+**Dwelling Unit** — Self-contained unit of accommodation providing living, cooking, and sanitary facilities used by one household.
+
+**Farm House** — Building used for agricultural/farm activity in agricultural zone, incidental to agricultural use.
+
+**Floor Space Index (FSI)** — Ratio of total floor area of all floors to the area of the building unit. FSI = Total floor area / Building unit area.
+
+**Gamtal** — Original settlement of a village; boundaries as demarcated by Revenue Department.
+
+**Hollow Plinth** — Open ground floor area on columns/pillars used exclusively for parking/circulation (maximum clear height 3.5 mts).
+
+**Loft** — Intermediate floor between two main floors, with maximum 30% of enclosing space.
+
+**Margin (Setback)** — Open space required to be left between building and plot boundary.
+
+**Open-to-Sky Space (OTS)** — Space open to sky, required for light and ventilation.
+
+**Parapet** — Low wall built along edge of roof/terrace/balcony.
+
+**Pergola** — Open structure of columns supporting a roofing grid of beams/rafters with open gaps, not enclosed.
+
+**Plinth** — The portion of a structure between surface of surrounding ground and surface of floor immediately above the ground.
+
+**Podium** — Continuous projecting base or pedestrian area under/around building, used for parking and vehicle movement.
+
+**Public Purpose** — Includes: sanitary works, housing for public/workers, development of scheduled areas, drainage, transport, education, medical relief, public offices, parks, water supply, markets, etc.
+
+**Refuge Area** — Area where persons unable to use stairways remain temporarily and await rescue during emergency.
+
+**Road Width** — Whole extent of space within road boundaries (new road as per DP/TP); or clear average width of existing carriageway and footpaths.
+
+**Row House** — Group of residential buildings on adjacent plots (with/without common walls), joined by common walls, with only front and rear open spaces.
+
+**Service Apartment** — Furnished apartment with kitchen/cooking facility, available for short/long-term stays.
+
+**Skip Floor** — Floor designated for holding occupants during fire emergencies; may be used as service areas, not habitable.
+
+**TDR (Tradable Development Rights)** — Mechanism where tradable floor space assigned to one building can be traded for use on another building unit.
+
+**Use Categories (Table 6.3 codes):**
+- DW1: Detached dwelling, clinic (no indoor treatment)
+- DW2: Semi-detached, row house, tenement, farm house, cottage industry
+- DW3: Apartment, hostel, dharamshala, pre-school, affordable housing
+- M1: Shop, restaurant, shopping centre, LPG godown, service establishment, clinic, fitness centre
+- M2: Shopping mall, lab, nursing home, corporate office, call centre, training centre
+- M3: Wholesale market, indoor hospital, diamond industry, IT activity
+- EDU1: Primary/secondary/higher secondary schools
+- EDU2: College, polytechnic, university
+- AS1: Community hall, banquet hall, town hall
+- AS2: Convention centre, exhibition hall, auditorium, planetarium, stadium, museum, wadi
+- AS3: Theatre, cinema, multiplex, clubs, golf course
+- AS4: Party plot, garden restaurants
+- INST: Research centres, hospital (INST1: Dwellings/retail as part of educational institute up to 20% FSI)
+- REG: Temples, church, mosque, gurudwara, any religious structure
+- HO: Bed & breakfast, guest house, hotel, motel, serviced apartment
+- SE: Auto repair, workshop, fabrication, public garage
+- IN1: Light/service industries, small factories, warehouses, printing press, poultry farm, dairy
+- IN1A: Tile/ceramic/clay/glass manufacturing industries
+- IN2: All industries except obnoxious/hazardous, textile units, stone quarrying, steel re-rolling
+- IN3: Slaughter house, meat/leather processing, cold storage, agro industries
+- IN4: Fuel storage, thermal power plant, obnoxious/hazardous industries, chemical industries
+- ST: Warehouse, godown, cold storage, timber mart
+- SCK: Small agricultural storage (max 30m × 12m)
+- TR: Truck/bus terminal, transport terminal
+- AG1: Horticulture, agricultural equipment sale/repair, dairy, animal rearing, brick kiln, farm house
+- AG2: Agricultural vocational training, mining, ship building, aquaculture
+- AG3: Poultry farm, agro-based godowns
+- TEMP: Fair, circus, exhibition, mela, pandal
+- PU: Sub-station, bus station, fuelling/EV station, parking, water supply, fire station
+- PI: Government/semi-govt offices, public facilities, post office, police chowki
+- H1: PHC, clinic, dispensary
+- H2: Indoor hospital up to 20 beds, surgical hospital, nursing home
+- H3: Civil hospital, medical college, hospital > 20 beds
+- H4: Hospital for infectious diseases, mental hospital
+- TO: Tourism sponsored activity
+- REC: Natural reserve, race track, zoo, gardens, botanical garden, play fields
+- SP&L: Sports complex, swimming pool, theme park, aquarium, zoo
+
+
+### part3-performance.md
+# Part III: Performance Regulations — CGDCR 2017
+
+> Source: CGDCR-2017 Part III, notified 15 Jan 2019 (GH/V/5 of 2019/EDB-102016-3629-L)
+
+---
+
+## Chapter 13: Buildings and Infrastructure
+
+### 13.1 Architectural Elements
+
+#### Boundary Wall / Compound Wall (Table 13.1)
+
+| Sr. | Use | Road Side (max ht, mt) | Other Sides (max ht, mt) |
+|-----|-----|------------------------|--------------------------|
+| 1 | Other than Industrial | 1.5 | 1.8 |
+| 2 | Industrial | 3.0 | 3.0 |
+
+Height measured from crown of adjacent road.
+
+**Road junction rule:** Grill fence with ≥50% perforation; base ≤0.8 mts for 9 mts length from corner.
+
+#### 13.1.1 Boundary Gate
+- Must NOT open outward onto road/pavement.
+- Minimum width: **6.0 mts** (all uses except Dwelling-1 & 2).
+- At road junctions: no gate on the curvature; on roads ≥12 mts wide, gate opening ≥15 mts from corner. If road frontage <15 mts, gate at farthest end from junction.
+
+#### 13.1.2 Level of Building Unit
+- Min level = crown of adjacent road (never lower).
+- Two-road access: take level from the wider road.
+- Any road–unit level difference must be accommodated within the unit boundary.
+
+#### 13.1.3 Paving in Building Unit
+- Maximum **50% of total open space** (including marginal open spaces and common plot) may be paved.
+- Remaining must be permeable for rainwater percolation.
+
+#### 13.1.4 Access Path
+- Min width: **1.8 mts**, even surface, no steps.
+- Sloping path gradient: max **1:12**.
+- **Except Dwelling-1&2:** min one accessible entrance with ramp; ramp width 1.2/1.5/1.8 mts for length 3.6/up to 9/more than 9 mts.
+- Ramp specs: gradient ≤1:12, min width 1.2 mts, max continuous length 9 mts, 800 mm handrail on both sides extending 300 mm beyond top & bottom.
+- Entrance landing: min 1.2 mts × 1.5 mts adjacent to ramp.
+- Stepped approach (additional): min width 1.35 mts, tread ≥300 mm, riser ≤150 mm, max 12 risers without landing, 900 mm handrail both sides.
+
+#### 13.1.5 Plinth
+- Min plinth height: **0.45 mts** from established building-unit level.
+- Hollow plinth: height 3.0–3.5 mts from FGL to FFL; free of enclosures except staircase and other permitted uses.
+
+#### 13.1.6 Entrance (all buildings except Dwelling-1&2)
+- Min clear door opening: **900 mm**, no step obstructing wheelchair.
+- Level difference at threshold: ≤12 mm.
+- Kick plates 300 mm high on glazed manual doors.
+- Door handle/lock: 900–1000 mm above floor, single-hand operable.
+
+#### 13.1.7 Minimum Clearance Height
+
+| Situation | Min Clear Height |
+|-----------|-----------------|
+| Habitable rooms (Dwelling / Commercial) | 2.9 mts (floor to floor) |
+| Circulation/service spaces (verandah, bath, toilet, passage, store, stair cabin) | 2.1 mts |
+| Industrial — all occupiable spaces | 3.0 mts |
+| Folded roof (from lowest fold) | 3.0 mts |
+| Sloping roof (from lowest point) | 2.2 mts |
+| Trussed roof (floor to tie beam bottom) | 2.8 mts |
+| Hollow plinth (parking) — max | 3.5 mts |
+| Basement (parking) — min | 2.8 mts |
+| Basement (parking) — max | 4.5 mts |
+| Mechanical parking basement | More height may be permitted |
+
+#### 13.1.8 Mezzanine
+- Min clear height: **2.1 mts** (below and above mezzanine).
+- Area ≤ **30% of the enclosed space**.
+
+#### 13.1.9 Loft
+- Max height: **1.2 mts**.
+- Min clear height below loft: **2.1 mts**.
+- Area ≤ **30% of the enclosed space**.
+
+#### 13.1.10 Basement
+1. Allowed per Reg 6.8 (Part II).
+2. May use available area after required margins.
+3. Multiple levels permitted.
+4. Min clear height: **2.8 mts** (or per Reg 6.8).
+5. If used for parking → vehicular ramps per Reg 6.7.3 & 13.1.14.
+6. Where basement margin < superstructure margin: no level difference in marginal space; marginal space shall be open to sky and motorable.
+7. Shoring/strutting/sheet piling mandatory during construction.
+8. **No drainage or water supply** provision permitted in basement.
+9. Structural materials must be **fire resistant** — no wood or combustible structural members.
+10. **No direct entry from road** to basement.
+
+#### 13.1.11 Railings
+- Min height: **1.15 mts** from FFL at all accessible edges (roofs, staircases, terraces, balconies, floor edges, large openings, glazed windows).
+- Max perforation dimension: **0.15 mts**.
+- Handrail pipe: min **40 mm diameter**.
+
+#### 13.1.12 Terrace
+- Accessible by common staircase; free from partitions.
+
+#### 13.1.13 Staircases (Table 13.2)
+
+| Use | Building Height | Min Flight Width | Min Tread | Max Riser | Max Travel Distance |
+|-----|----------------|-----------------|-----------|-----------|---------------------|
+| Dwelling-1&2 | ≤12 mts (3 floors) | 1.0 mt | 250 mm | 200 mm | 30 mt (R) / 25 mt (NR) |
+| Dwelling-3 | ≤12 | 1.2 mt | 250 mm | 180 mm | 30 (R) / 25 (NR) |
+| Dwelling-3 | >12 & ≤25 | 1.5 mt | 250 mm | 180 mm | 30 (R) / 25 (NR) |
+| Dwelling-3 | >25 | 2.0 mt | 300 mm | 160 mm | 30 (R) / 25 (NR) |
+| Non-Residential (excl. Industrial & Assembly) | ≤25 | 1.5 mt | 300 mm | 160 mm | 25 |
+| Non-Residential (excl. Industrial & Assembly) | >25 | 2.0 mt | 300 mm | 160 mm | 25 |
+| Assembly | All heights | 2.0 mt | 300 mm | 160 mm | 25 |
+| Industrial | All heights | 1.5 mt | 300 mm | 160 mm | 25 (NR) / 20 (HZ) |
+
+**Alternative:** Two staircases of 1.5 mts = one of 2.0 mts; two of 1.2 mts = one of 1.5 mts (within travel distance).
+
+**Basement staircase:** Same width as regular staircase; per Fire Prevention & Life Safety Regulation-2016.
+
+**Mixed use:** Separate staircase if GF/any floor used for non-residential in a residential building.
+
+#### 13.1.14 Ramp
+
+**Vehicular Ramp (Table 13.3):**
+
+| Vehicle | Min Ramp Width | Min Inner Curve Radius |
+|---------|---------------|------------------------|
+| Two-wheeler | 2.0 mts | 2.0 mts |
+| Car | 3.0 mts | 3.0 mts |
+| Truck | 6.0 mts | 4.0 mts |
+
+- Max slope: **1:7**.
+- Level platform at top and bottom: width = ramp width, min length **4.5 mts**.
+- Min clear height on ramp: **2.6 mts**.
+
+**Basement Ramp Count (Table 13.4):**
+
+| Parking Area | No. of Ramps | Width |
+|-------------|-------------|-------|
+| ≤750 sq.mt | 1 | 3.0 mts |
+| >750 sq.mt | 1 | 6.0 mts |
+| >750 sq.mt | 2 | 3.25 mts each |
+
+**Pedestrian Ramp** (required for buildings >4 mts height with Institutional, Assembly, Public Institutional, Educational-2, Mercantile, Business uses — unless lift is provided per Reg 13.12):
+- Width: 1.2/1.5/1.8 mts for ramp length 3.6/up to 9/more than 9 mts.
+- Landing: 1.5 mts depth every 9 mts.
+- Max slope: **1:12**.
+- Edge protection: min 100 mm.
+- Handrails: both sides at **700 mm and 900 mm** height, extending 300 mm beyond top and bottom.
+- Entrance landing: min 1.8 mts at start and end.
+
+---
+
+### 13.2 Parking
+
+#### 13.2.1 Parking to be Provided
+Per Part II or Schedule 16 (Part I). Disability parking required for all buildings except Dwelling-1&2.
+
+#### 13.2.2 Car Parking Design
+- Min car space: **2.5 mts × 5.5 mts**.
+- Access lane: min **3 mts** (single-sided); min **5.5 mts** (double-sided).
+- Min clear height: **2.6 mts**.
+- Disability parking: **2 spaces per 25 cars** (or fewer); bay width 2.5 mts + 1.2 mts side transfer bay; within 30 mts of main entrance; 50% visitor parking at ground level.
+
+#### 13.2.3 Two-Wheeler Parking Design
+- Min space: **0.90 mts × 2.0 mts**.
+- Access lane: min **2.0 mts**.
+- Min clear height: **2.6 mts**.
+
+#### 13.2.4 Truck Parking Design
+- Min space: **4.0 mts × 8.0 mts**.
+- Access lane: min **6.0 mts**.
+
+#### 13.2.5 Loading/Unloading Space
+Required for: Industrial, Storage, Mercantile-1/2/3 (except shops ≤1000 sq.mt carpet area, restaurants, hospitals, nursing homes, business, light home workshop, IT/call center, labs).
+- Rate: **3.5 mts × 7.5 mts** per 1000 sq.mt carpet area or part thereof.
+- Ramp width: min **6.0 mts**.
+- Permitted on ground or first basement; counts as part of parking area.
+
+---
+
+### 13.3 Lighting
+As per NBC Part VIII, Section I.
+
+### 13.4 Ventilation
+
+| Space | Requirement |
+|-------|------------|
+| Habitable rooms | Openings ≥ 1/10th floor area for open space; aggregate openings ≥ 1/7th floor area |
+| Bathrooms/WC | Min 0.25 sq.mt opening per unit; open space ≥ 0.9×0.9 mts |
+| Staircase (Dwelling-1&2) | ≥1 sq.mt open air space; aggregate window area ≥1.2 sq.mt at each landing |
+| Industrial rooms | Openings ≥1/7th floor area; open air space width ≥1/3rd building height |
+| Special buildings (auditorium, halls) | ≥1/5th total floor area via doors/ventilators/windows |
+
+- Atrium covered from top: must have light & ventilation provision.
+- Deficiency in all cases: compensate with mechanical systems (NBC standards).
+- **No conversion** of air-conditioned theatre to non-air-conditioned.
+
+### 13.5 Air Conditioning (Special Buildings)
+- Temperature: 22–26.5°C (72–80°F)
+- Air changes: ~10/hour
+- Relative humidity: 50–60%
+- Fresh air: 7.5 CFM/person
+
+### 13.6 Water
+- Water tank: mosquito-proof; tank >1.5 mts height needs permanent non-ferrous ladder.
+- Non-residential buildings: accessible drinking water near accessible toilet.
+
+### 13.7 Signage (all buildings except Dwelling-1&2)
+- Letter size: min **20 mm**.
+- Contrasting colour, illuminated.
+- International wheelchair symbol at lift, toilet, staircase, parking.
+- Educational/institutional/govt: Braille information board near entrance.
+
+### 13.8 Letter Box
+Required for buildings with more than **2 floors** (including GF); one per unit at ground floor level.
+
+### 13.9 Sanitation
+
+**Residential:** Min 1 WC of 0.9 sq.mt per dwelling unit.
+
+**Non-Residential:** Min 1 accessible WC (1.5 mt × 1.75 mt; 900 mm door opening outward; handrails 50 mm from wall; WC seat 500 mm from floor) at ground level. Plus gender-specific WCs per Table 13.9.1:
+
+| Use | Users Rate | Urinals | WCs | Washbasins |
+|-----|-----------|---------|-----|-----------|
+| Educational | 1/sq.mt carpet | 5 or 1/50 males | 2 or 1/200 users/gender | — |
+| Business | 1/4 sq.mt | See table (1/25 per gender for 21–100 users) | — | — |
+| Industrial/Storage | 1/25 sq.mt | 1/100 males (≤100 users); 1/50 (>100) | 1/25/gender (≤100); 1/50/gender (>100) | 4 sq.mt wash area |
+| Special Buildings | 1/seat | 2/75 users | 1/100/gender | 1/200 users |
+
+- Min **25% of WCs and urinals** in common accessible locations.
+
+**Special Buildings:** WC count based on seats; per-gender apportionment.
+
+### 13.10 Drainage
+Subject to Competent Authority approval. Must comply with Gujarat Pollution Control Board norms.
+
+**Septic Tank (where no public drainage):**
+- Min inner width: 75 cms; min depth below water level; per capita min liquid capacity: 85 litres; length ≥ 2× width.
+- Sub-soil dispersion: ≥12 mts from drinking water source; ≥2 mts from habitable building.
+- Vent pipe: min 50 mm dia, mosquito-proof cage, ≥2 mts above septic tank.
+- Pipe min diameter: 100 mm; junction angle ≤45°.
+- Gradient of drains: 1:300 to 1:1400.
+
+### 13.11 Electrical Infrastructure
+As per NBC Part VIII, Section 2.
+
+### 13.12 Lifts and Elevators
+
+**Mandatory lift triggers:**
+- Buildings >4 mts height with Institutional, Assembly, Public Institutional, Educational-2 uses: min **1 lift** to all public floors above GF.
+- Buildings >10 mts height:
+
+| Use | >10 mts | >25 mts |
+|-----|---------|---------|
+| Dwelling | Min 1, or 1 per 30 units (excl. GF + 2 upper) | Min 2, or… |
+| Non-Residential | Min 1, or 1 per 1000 sq.mt BUA (excl. GF + 2 upper) | Min 2, or… |
+
+- Buildings >25 mts: one required lift must be a **fire lift** (per Fire Prevention & Life Safety Reg-2016).
+
+**General lift requirements:**
+- From ground level or lower.
+- Min capacity: **6 persons** (6, 8, 12, or 24 person sizes permitted).
+- Clear door width: min **900 mm**; landing in front: min **1.8 mts × 2.0 mts**.
+- Handrail: 600 mm long at 1 mts height inside cabin.
+- Auto door closing: min **5 seconds**, max speed **0.25 m/sec**.
+- Audible floor indicator inside cabin.
+
+### 13.13 External Façade
+- Glazed area: max **50% of each facade** (non-reflective glass; safety railing to sill level).
+- **North facade:** entire area may be glazed (10° deviation allowed).
+
+### 13.14 Display Structures
+- Billboards: size/location per Part II Reg 11.1; structural safety per Reg 16.8.
+- Rooftop billboards: not permitted unless entire roof is non-combustible.
+
+### 13.15 Occupant Load
+
+| Occupancy | Load (persons per 100 sq.mt plinth/covered area) |
+|-----------|--------------------------------------------------|
+| Residential | 8.0 |
+| Educational | 25.0 |
+| Institutional | 6.6 |
+| Assembly (no fixed seats, dining) | 166.6 |
+| Assembly (fixed/loose seats + dance floor) | 66.6 |
+| Mercantile (street floor/sales basement) | 33.3 |
+| Mercantile (upper sale floor) | 16.6 |
+| Business & Industrial | 10.0 |
+| Storage | 3.3 |
+| Hazardous | 10.0 |
+| Dormitory (aged homes, orphanages, mental hospitals) | min 13.3 |
+
+---
+
+## Chapter 14: Fire Prevention and Safety
+
+Fire prevention follows **Fire Prevention and Life Safety Regulations-2016** (as amended).
+
+**Fire Safety Professionals (Schedule 14):**
+- Fire Officer and Fire Men: registered with Chief Fire Officer; qualifications per Schedule 14.
+- Applicability: per Schedule 3A.
+
+---
+
+## Chapter 15: Special Buildings Performance Regulations
+
+### 15.1 Visibility (Auditorium/Cinema Halls)
+- Nearest seat to screen ≥ effective width of picture (ratio 1:1.33); 3/4 for CinemaScope; 1/2 for 70mm.
+- Balcony line of sight: ≤30° to horizontal.
+- Staggered seating preferred.
+- Max angle from front seat to top of screen: **50°**.
+
+### 15.2 Mixed Occupancy
+- No mixed development with buildings >45 mts height.
+- Commercial and residential must be separated by a **skip/service floor** (max clear height 2.1 mts from beam bottom to FFL; may be at any floor). *(2019 amendment)*
+- Exit door width ≥ 2000 mm per 600 persons.
+- Min **4 exits** per assembly space, as remote from each other as practicable.
+- At least 1 seating row accessible by ramp/elevator for disabled visitors.
+- Aisle width ≥ 1.2 mts; max 7 seats from aisle; cross-aisles min 1.0 mt every 10 rows.
+- Fascia railings: ≥1000 mm; aisle-end railings: ≥1000 mm (≥1100 mm at foot of steps); cross-aisle railings: ≥900 mm.
+- Lobby waiting areas: separated from exit ways by partition/railing ≥105 cm; exits provided at 1 person per 0.3 sq.mt.
+- Seating ≥300 persons: all seats fastened to floor. Tapestry must be fire resistant.
+- Row spacing: ≥850 mm back-to-back; ≥350 mm clear between seat back and front of next seat.
+- Non-fastened seats permitted in restaurants/clubs: max 1 seat per 1.4 sq.mt.
+- Seat width (bench): 450 mm per person.
+- Stage with fly galleries: automatic sprinklers over/under stage + auxiliary spaces; proscenium fire curtain (lateral pressure: 4 kN/sq.mt); emergency closing device.
+- Stage roof ventilator: ≥1/8 of stage floor area; openable from stage floor by hand and by fusible link/auto heat/smoke device.
+- Proscenium wall: max 2 openings ≤2 sq.mt each with self-closing fire-resistant doors.
+- Automatic smoke vents (smoke detector actuated): 8 air changes/hour above auditorium.
+
+### 15.3 Institutional Buildings
+- Facilities to move bed-ridden patients across smoke barriers when floor area >280 sq.mt.
+- Min 2 exits per floor (including basements): doors to outside, stairs, ramps, horizontal exits, fire escape.
+- Exits per Table Reg 22.4 corridor widths.
+- Combustible construction buildings housing inmates: automatic sprinklers mandatory.
+
+### 15.4 Public Safety
+- **CCTV** mandatory in public areas of assembly buildings and entertainment venues (per appropriate authority protocols).
+
+---
+
+## Chapter 16: Structural Safety
+
+### 16.1 Applicability
+All buildings per Schedule 6.
+
+### 16.2 Structural Stability of Existing Buildings
+- Periodic assessment by expert panel (intervals per Schedule 6).
+- Owner/developer/occupant responsible for repair/retrofitting.
+- Competent authority can carry out work at owner's cost if non-compliant.
+
+### 16.3 Additions and Alterations
+Entire structure must conform to new-building structural/seismic requirements **unless** all three conditions met:
+1. Addition/alteration itself complies with new building standards.
+2. Seismic forces in existing elements not increased by >5% (or element still within capacity).
+3. Seismic resistance of existing elements not decreased below new-building requirement.
+
+### 16.4 Change of Use
+If reclassified to Higher Importance Factor (IS:1893-2002): must meet new-building seismic requirements.
+
+### 16.5 Structural Safety During Construction
+- Materials/workmanship per NBC Part V and Part VII.
+- Borrow pits must drain; no isolated pits that accumulate water.
+- Alternative materials/methods require Competent Authority approval.
+- Natural disaster retrofitting: setback/margin reductions permitted by CA case-by-case.
+
+### 16.6 Structural Safety Tests
+Expert panel may require tests (at owner's expense) with approved laboratory. Test results retained by CA for ≥2 years.
+
+### 16.7 Design Standards
+
+**Structural:**
+- IS:456:2000 (RCC), IS:800:1984 (Steel), IS:875 Part 2 (Imposed loads), IS:875 Part 3 (Wind), IS:883:1966 (Timber), IS:1904:1987 (Foundation), IS:1905:1987 (Masonry)
+
+**Seismic:**
+- IS:1893-2002, IS:13920-1993, IS:4326-1993, IS:13828-1993, IS:13827-1993, IS:13935-1993
+- Form 2A structural certificate required with building plans.
+
+**Cyclone/Wind:** IS:875(3):1987
+
+Always use latest revision of referenced standards.
+
+**Structural Inspection Report (SIR):** Required for all buildings in Schedule 6; submitted in Form No. 15.
+
+### 16.8 Display Structures
+Every billboard to be designed per NBC structural safety standards.
+
+---
+
+## Chapter 17: Environmental Management
+
+### 17.1 Minimum Distance from Water Body
+
+| Situation | Minimum Clearance |
+|-----------|------------------|
+| River (no embankment) — from bank boundary to any development | 30 mts |
+| Embankment of river — to any building | 15 mts (or more if prescribed by other orders) |
+| Other water bodies (lake/talav, canal, nala) — to any building | 9 mts |
+
+### 17.2 Rain Water Management
+
+**Disposal:** Effective drainage system; no discharge into adjacent units; rain water pipes on outside walls; discharge ≤0.6 mts above street level.
+
+**Harvesting (Reg 17.2.2) — MANDATORY for ground coverage ≥80 sq.mt:**
+
+| Plot/Building Area | Required System |
+|-------------------|-----------------|
+| Ground coverage 80–499 sq.mt | Percolation pit or bore recharge in marginal space |
+| Building-unit 500–1500 sq.mt | Percolating well with RWH system (up to 1st aquifer) |
+| Building-unit 1501–4000 sq.mt | Percolating well (up to 2nd aquifer) |
+| Building-unit >4000 sq.mt | 1 percolating well per 4000 sq.mt OR Water Retention Pond (min 3,00,000 L) with 1 percolating well per 5 percolating wells |
+
+**Rain Water Storage:** Mandatory tank for building-unit area >1000 sq.mt.
+
+**Solid Waste Bin:**
+- Residential: 10 L per DU; max 80 L per bin.
+- Non-residential: 20 L per 100 sq.mt; max 80 L; air-tight lid.
+- Clubs/community halls/party plots: min 4-tonne container on paved area 6 mts × 7.5 mts.
+
+### 17.3 Grey Water Recycling
+
+**Applicable to new construction in (Table 17.1):**
+
+| Use | Min Built-up Area |
+|-----|-----------------|
+| Hospitals & Nursing Homes | >5,000 sq.mt |
+| Hospitality (hotels, lodges, guest houses) | >10,000 sq.mt |
+| Hostels for schools/colleges/training centres | >10,000 sq.mt |
+| Community centres, banquet halls | >10,000 sq.mt |
+| Commercial | >10,000 sq.mt |
+| Hazardous/water-polluting/chemical industries | >10,000 sq.mt |
+
+**System requirements:**
+- Separate grey water (bathroom/kitchen) from WC waste via separate downpipes.
+- Recycled water stored in separate tank (purple pipes); supplied to WC flushing, garden taps, car wash — non-potable non-contact uses only.
+- Double-button cistern (dual flush) mandatory in every WC.
+- No cross-connection with potable water; recycled system at lower pressure.
+- Testing every **6 months**; results available to CA on demand.
+- Developer must install system before selling.
+- Purple-coloured piping for grey water/recycled water system.
+
+### 17.4 Tree Plantation
+
+| Building Unit Area | Minimum Trees |
+|-------------------|--------------|
+| >100 sq.mt | 3 trees per 200 sq.mt (or part thereof) |
+| >100 sq.mt (up to 500 sq.mt) | 4 trees minimum + 4 per 200 sq.mt |
+| >500 sq.mt | 5 trees per 200 sq.mt |
+
+- Preferably shade-giving species from Schedule 12.
+- Existing conserved trees count toward requirement.
+- Tree plantation deposit payable; refundable after **5 years** (if trees maintained); otherwise forfeited for tree plantation use by CA.
+- Trees planted with guards; not obstructing fire vehicle access.
+
+### 17.5 Solar Water Heating
+
+Mandatory for buildings >2000 sq.mt:
+- Bedded hospitals & nursing homes
+- Hotels, lodges, guest houses
+- Hostels for schools/colleges/training centres
+- Community centres, banquet halls
+
+Also for residential detached/semi-detached units with individual DU area >200 sq.mt.
+
+**Roof Top Solar PV (Table 17.3):**
+
+| Category | Area Standard | Generation Requirement |
+|----------|--------------|----------------------|
+| Plotted Housing | >1000 sq.mt | Min 5% connected load or 20W/sqft available roof space (whichever is less) |
+| Group Housing | All proposals | Same |
+| Educational, Institutional, Commercial, Industrial, Mercantile, Recreational | Plot ≥1000 sq.mt (mandatory if shadow-free roof >50 sq.mt) | Same |
+
+*Available roof area = 70% of total roof (30% reserved for residents' amenities). Area provision: 12 sq.mt per 1 KWp.*
+
+### 17.6 Energy Efficient Buildings
+- GRIHA rating (or other Govt-recognised institute) → **5% discount** on total chargeable FSI payment.
+- Must apply to GRIHA before commencement.
+
+### 17.7 Environment Impact Assessment
+
+**EIA/Environmental Clearance from SEIAA required before development permission:**
+
+| Project Type | Trigger |
+|-------------|---------|
+| Building & Construction | Built-up area ≥20,000 sq.mt and <1,50,000 sq.mt |
+| Townships & Area Development | Building-unit ≥50 Ha OR built-up ≥1,50,000 sq.mt |
+
+- Phased projects: EC required before first phase approval.
+
+---
+
+## Chapter 18: Pollution Control
+
+| Type | Applicable Law |
+|------|---------------|
+| Air Pollution | Air Pollution Control Act 1981 + Gujarat Smoke Nuisance Act 1963 |
+| Water Pollution | Water (Prevention and Control of Pollution) Act 1974 |
+| Noise Pollution | Noise Pollution (Regulation and Control) Rules 2000 |
+| Industrial Effluents | No disposal in water bodies; purification plants as per CA/GPCB |
+
+---
+
+## Chapter 19: Maintenance and Upgradation
+
+### 19.1 Maintenance of Buildings
+
+**Classification:**
+- **Class 1:** All framed structures, factory buildings, cinema, auditorium, public institutional, schools, colleges, hostels.
+- **Class 2:** Masonry-wall residential buildings with height >9 mts.
+
+Both classes require **periodic structural inspection by SEOR** (intervals per Schedule 6). SEOR submits Structural Inspection Report to CA. Owner must submit within **1 month of inspection due date**.
+
+### 19.2 Lifts and Escalators
+Owner responsible for maintenance; per IS:1860-1980, IS:6620-1972, IS:4591-1968. Maintenance schedule in consultation with lift manufacturer. Log book to be maintained. Accidents must be reported to CA.
+
+### 19.3 Fire Prevention & Safety
+Owner responsible for all fire prevention provisions (fixed systems, extinguishers, first aid, fire lifts, escape stairs).
+**Buildings >13 mts height:** Fire Protection Consultant on Record inspects at intervals ≤12 months; certifies fire safety to CA.
+
+---
+
+## Chapter 20: Conformity to Other Acts
+
+### 20.1 Minimum Clearances from Trunk Infrastructure
+
+**Electrical Lines (Table 20.1):**
+
+| KV | Min Clearance from Centre of Line |
+|----|----------------------------------|
+| 220 KV | 17.5 mts |
+| 132 KV | 13.5 mts |
+| 110 KV | 11.0 mts |
+| 66 KV | 9.0 mts |
+| 33 KV | 7.5 mts |
+| 22 KV | 3.0 mts |
+| 11 KV | 2.5 mts |
+
+**Petroleum Pipelines:** 12 mts from centre of pipeline.
+
+**Oil Wells:** Per Oil Mines Regulations-1984 (Mines Act 1952).
+
+**Water Bodies:** Per Reg 17.1.
+
+### 20.2 NOC Requirements
+
+| Situation | NOC From |
+|-----------|---------|
+| Within Airport Funnel/Critical Area | Airport Authority |
+| Within 30 mts of Railway Boundary | Railway Authorities |
+| Assembly, Religious, Hospitality, Party Plot, Fuelling/EV Stations | Commissioner of Police |
+| Within 300 mts of any Jail | Jail Authority |
+| Vicinity of ISRO | ISRO |
+| Vicinity of protected monuments | Archaeological Survey of India (ASI) |
+| Vicinity of defense establishments | Station Commander |
+| EIA projects | MOEF/SEIAA (Environment Protection Act 1986) |
+| ULC Act land | ULC Act competent authority + affidavit/indemnity bond |
+
+> **Note:** Development Permission granted on NOC basis is not final/conclusive in legal sense. The issuing authority has no legal responsibility for such permissions.
+
+### 20.3 Other Acts Compliance
+- Factories Act 1948 + Gujarat Factories Rules
+- Gas Cylinders Rules 1981
+- Explosives Rules 1983 (Indian Explosives Act 1884)
+- Manufacture, Storage and Import of Hazardous Chemicals Rules 1989
+
+---
+
+## Chapter 21: Quality Control and Inspection
+
+### 21.1 Applicability
+- All Residential buildings >16.50 mts height.
+- All Non-residential buildings.
+- All buildings in Seismic Zone IV & V.
+
+### 21.2 Inspection and Safety Certificate
+Owner/developer/occupant + registered Person on Record must certify inspection and safety report per Schedule 17.
+
+
+### part2-margins-height-parking.md
+# CGDCR-2017 Part II: Margins, Height, Parking, Basement, OTS
+
+## Building Height (Reg 6.6, Table 6.23)
+
+| Category | <9m road | 9–<12m | 12–<18m | 18–<36m | ≥36m |
+|----------|----------|--------|---------|---------|------|
+| D1 (except GMC & RUDA) | 10 | 16.5 | 30 | 45* | 70 |
+| D1-RUDA, D2 | 16.5 | 16.5 | 30 | 45* | 70 |
+| D3, D6 | 11 | 11 | 11 | 11 | 11 |
+| D4, D5, D7A | 10 | 16.5 | 30 | 45 | 45 |
+| D7B, D8, D10 | 10 | 16.5 | 25 | 25 | 25 |
+
+**\*70 mts** permitted on 18m+ roads within High Density Development Area (200m from outer boundary of road) where max permissible FSI > 3.5.
+
+**Other height rules:**
+- Adjacent buildings of different heights: taller building's margin applies between them
+- Airport clearance required for maximum permissible height
+- GMC: See Table 7.1 — up to 7.5m road: 2× road width; 7.5–12m: 16.5m; ≥12m: 25m
+- GME: Same as GMC (Table 8.1)
+
+---
+
+## Road Side Margins (Reg 6.7.1, Table 6.24)
+**All categories except GMC and D9:**
+
+| Road Width | D1 | D2 | D3/D4/D5/D7A | D7B/D8 |
+|------------|----|----|--------------|--------|
+| ≤7.5m | 2.5 | 2.0 | 2.0 | 2.0 |
+| >7.5–≤9.0m | 2.5 | 2.5 | 2.5 | 2.5 |
+| >9.0–≤12.0m | 3.0 | 2.5 | 2.5 | 2.5 |
+| >12.0–≤15.0m | 3.0 | 3.0 | 3.0 | 3.0 |
+| >15.0–<18.0m | 4.5 | 3.0 | 3.0 | 3.0 |
+| ≥18.0–<30.0m | 6.0 | 6.0 | 6.0 | 4.5 |
+| ≥30.0–<45.0m | 7.5* | 7.5 | 6.0 | 4.5 |
+| ≥45.0m | 9.0 | 9.0 | 6.0 | 4.5 |
+
+*For RUDA: 6.0m if BU ≤1000 sqm and/or height ≤25m. Special buildings: road side margin = 12m.
+
+**Rule:** Road side margin = MAX(margin per road width, margin per building height).
+
+---
+
+## Margin Between Two Buildings (Table 6.25)
+**All categories except GMC and D9:**
+
+| Building Height | D1 (excl.GMC) | D1-RUDA, D2 | D3,D6 | D4,D5,D7A | D7B,D8,D10 |
+|----------------|---------------|-------------|-------|-----------|-----------|
+| ≤10m | 4.5 | 4.5 | 4.5 | 4.5 | 4.5 |
+| ≤16.5m | 4.5 | 4.5 | 4.5 | 4.5 | 4.5 |
+| ≤25m | 6.0 | 6.0 | — | 4.5 | 4.5 |
+| ≤45m | 9.0 | 9.0 | — | 6.0 | — |
+| ≤70m | 12.0 | 12.0 | — | 6.0 | — |
+
+**Margin from Common Plot:** 3.0m (BH ≤25m); 6.0m (BH >25m).
+
+*For D3: 11m applies for ≤10m height.*
+
+---
+
+## Rear and Side Margins (Table 6.26)
+**All categories except GMC & D9:**
+
+### Dwelling 1 & 2:
+| Plot Size | Rear | Side |
+|-----------|------|------|
+| ≤25 sqm | Not required | Not required (G+1 only) |
+| >25–≤80 sqm | — | 1.0m on any one side (incl. rear) |
+| >80–≤150 sqm | — | 1.5m on any one side (incl. rear) |
+| >150–≤300 sqm | 2.0m | 1.5m any one side |
+| >300–≤500 sqm | 3.0m | 2.0m both sides |
+| >500 sqm | 3.0m | 3.0m both sides |
+
+### Other than DW1-2 & Industrial:
+| Building Height | Rear | Side |
+|----------------|------|------|
+| ≤16.5m | 3.0m | 3.0m* |
+| >16.5–≤25m | 4.0m | 4.0m* |
+| >25–≤45m | 6.0m | 6.0m |
+| >45m | 8.0m | 8.0m |
+
+*For PS ≤750 sqm: 3.0m margin up to 25m height.*
+
+### Industrial:
+| Plot Size | Rear | Side |
+|-----------|------|------|
+| ≤500 sqm | 3.0m | 3.0m |
+| >500–≤1000 sqm | 4.5m | 4.5m |
+| >1000 sqm | 6.0m | 6.0m |
+
+---
+
+## Permissible Uses in Margin (Reg 6.7.3)
+
+**For DW1-2-3 (except row house, cottage industry, pre-schools):**
+- Ancillary structures (parking garage, servant quarter, WC, bathroom): any zone, side/rear margins only, max 16.5 sqm ground coverage, max 3.0m height
+- Surface water tank: up to 1.5m height
+- Open/cantilever staircase: max 1.0m width, landing max 2.0m — side/rear only (not road side)
+- Underground water tank, percolation well, bore well + pump room (max 2m×2m, height 2m)
+- Partition wall: max 1.5m height along common boundary
+- Weather sheds/projections: up to 0.60m; above 2.4m from ground; not habitable
+
+**For all uses (non-industrial, non-institutional):**
+- Security cabin (pre-fab only): max 2m×4m, max 3.0m height — in road side margin
+
+**For Industrial and Institutional:**
+- Security cabin: max 16.5 sqm, max 3.0m height — in road side margin; min 4.5m from building
+
+**Other permitted margin uses:**
+- Pedestrian access paths, ramps
+- Common plot
+- Vehicular ramp to basement: in side/rear margins (BU ≤2000 sqm AND height ≤25m)
+- Electrical substation, transformer, box-type transformer, feeder pillar, meter room (per electric company norms) — side/rear only
+- Refuge area (cantilever, for BH >25m): per Fire Safety Regulations 2016
+- Fire escape staircase (for BH >45m): side/rear only
+- Parking: in margins except access path from gate to staircase; if contiguous with hollow plinth parking (min 6.0m dimension)
+- Basement: within side/rear margins after leaving 3.0m from boundary
+- Porch: min 4.5m height; 4.5m clear space kept for fire vehicles
+- Sky walk: not below 10.50m height
+
+**Special Buildings in road side margin:**
+- Porch (cantilever): up to 6m from building line, min 3.0m height — not counted in FSI
+- Parking: allowed after leaving min 6.0m from boundary (6.0m used for shade trees)
+
+---
+
+## Basement (Reg 6.8)
+
+### Margins for Basement:
+- No basement in road side margin or gamtal/CW setback
+- Side & rear basement margin: 3.0m from building unit boundary
+- Combined shared basement parking: full marginal space (except road side) with adjacent owner's consent
+- For BU <500 sqm: margins as per Reg 6.7.3; min 3.0m from common wall of adjacent existing building
+- Basement permitted under common plot/internal road for parking only
+
+### Extent:
+- Basement for parking: BU ≥250 sqm
+- Other uses: any size, one level only (multi-level only as per parking requirement)
+
+### Height: Min 2.80m, Max 4.50m (clear height, beam bottom to finished floor)
+
+### Permitted Uses in Basement:
+- Parking, safe deposit vault, AC plant, grey water treatment, sewage treatment, water tank, storage (non-inflammable)
+- NO habitable use
+- Hospital basement: radiation device/therapy room, MRI/X-ray room
+- Parking-only basement: other uses permitted at level-1 only, max 25% of total basement built-up area (counts towards FSI)
+
+### Gamtal/CW Basement:
+- No basement in required setback
+- One level for parking if BU >300 sqm; two levels if BU >1500 sqm
+- No water/drainage connection in basement
+
+---
+
+## Parking Requirements (Reg 6.15, Table 6.44)
+
+| Use | Minimum Parking | Visitor's Parking |
+|-----|----------------|-------------------|
+| DW1, DW2 | 1 car per unit for >100–300 sqm plinth area; +1 car per 100 sqm thereafter | Nil |
+| DW3 | 20% of Total Utilized FSI | 10% |
+| Mixed Use / Mercantile / Religious / Hospitality / Transport | DW as applicable; Others: 30% FSI (BU ≤750 sqm), 40% (BU 750–2000), 50% (BU >2000) | Residential 10%; Commercial 20% |
+| Assembly 1,2,3 | 50% of Total Utilized FSI | 20% |
+| Assembly 4 | 50% of Building Unit Area | 20% |
+| Assembly-Stadium | 1.25 sqm per person of total capacity | — |
+| Institutional, Public-Institutional | 50% of Total Utilized FSI + ambulance at ground level for hospitals | 20% |
+| Industrial 1-4, Storage | 10% of Total Utilized FSI | Nil |
+| Educational: Primary/Pre-school | 25% of Total Utilized FSI | 10% |
+| Educational: Secondary/Higher Secondary, Colleges | 40% of Total Utilized FSI + drop-off/pickup facility | 10% |
+| Sports & Leisure | 25% of Building Unit Area | 10% |
+| Recreation | 10% of Building Unit Area | 10% |
+
+**Key parking rules:**
+- 50% of visitor parking at ground level
+- 50% of all required parking for cars
+- Parking area includes space + driveway + aisles; excludes approach road, vehicular lift, ramps
+- Parking in side/rear margins (not access road)
+- Parking in road side margin: after 4.5m clear margin from boundary (BU >750 sqm) or all road side margin (BU ≤750 sqm)
+- Multi-level parking requires vehicular ramp (or vehicular elevator with floor sprinklers)
+- No parking within Atrium
+- Misuse of parking = authority discontinues entire building use
+- Stacked/mechanized parking: 1.5× credit (500 sqm counted as 750 sqm)
+- Heritage structures (hospitality/sympathetic adaptive reuse): parking not required
+
+**SPD4 (Transit Oriented Zone) — M1 use:** 35% of utilized FSI + 20% visitor parking.
+
+---
+
+## Open-to-Sky Space / OTS (Reg 6.16)
+
+### Building Dimensions Rule:
+- Building depth ≥9.0m from front open space: OTS of 5.6 sqm, no side <1.8m, at plinth level, for every 9m depth
+- If building width ≤4.5m: OTS of 3.0 sqm, no side <1.5m
+- Exception: if depth ≤18m AND openings on at least 2 sides over street or OTS ≥2.4m wide → no OTS required
+
+### Minimum OTS Dimension (Table 6.45):
+| Building Height | Gamtal & CWC | Other than Gamtal |
+|----------------|-------------|-------------------|
+| ≤10m | 1.20m | 1.5m |
+| >10–≤16.5m | 2.0m | 1.5m |
+| >16.5–≤25m | 3.0m | 2.5m |
+| >25–≤45m | NIL | 3.0m |
+| >45m | NIL | 6.0m |
+
+Additional OTS beyond minimum counts towards FSI computation.
+
+---
+
+## Internal Roads (Reg 6.17.2, Table 6.46)
+
+| Road/Approach Length | Layout (Resi/Non-resi) | Sub-Plotting (Resi/Non-resi) | Building Approach (Resi/Non-resi) |
+|---------------------|----------------------|------------------------------|----------------------------------|
+| ≤15m | 6.0/6.0 | 3.0/4.5 | 3.0/4.5 |
+| ≤45m | 6.0/6.0 | 4.5/6.0 | 4.5/6.0 |
+| >45–75m | 6.0/7.5 | 6.0/7.5 | 6.0/7.5 |
+| >75–150m | 7.5/9.0 | 7.5/9.0 | 7.5/9.0 |
+| >150–450m | 9.0/12.0 | 9.0/12.0 | 9.0/12.0 |
+| >450m | 12.0/18.0 | 12.0/18.0 | 12.0/18.0 |
+
+**Cul-de-sac:** Turning circle dia 13.5m OR 12m×6m T-turn required; waived for 7.5m road ≤110m length.
+
+**Road Curvature (Table 6.47):**
+- ≤6m road: 3.0m radius
+- >6–9m: 4.5m radius
+- >9–18m: Half width of wider road, max 7.5m
+- >18m: 9.0m radius
+
+---
+
+## Common Plot (Reg 6.17.5, Table 6.49)
+
+| Use | Building Unit Area | Minimum Common Plot |
+|-----|-------------------|---------------------|
+| General (not industrial/institutional) | ≥2000 sqm | 10% of BU area (8% for CWC/Gamtal) |
+| Industrial | ≤5000 sqm | Nil |
+| Industrial | >5000–<20000 sqm | 8% of BU area |
+| Industrial | ≥20000 sqm | 1600 sqm + 5% of area exceeding 20000 sqm |
+| REG, EDU1-2, INST, Assembly, PI | ≥2000 sqm | 20% of building area |
+
+**For BU <2000 sqm with building height >25m:** Common plot = 10% of BU or 200 sqm, whichever is more.
+
+**Common plot rules:**
+- Sub-divided such that each piece ≥200 sqm, no side <10m (RAH: no side <8m)
+- Angle between adjacent sides ≥60°
+- No construction except: electric substation, transformer, water tank, pump room, security cabin, community/society common amenities (max 15% ground coverage, max 7.5m height, community facility ≤50 sqm doesn't count to FSI)
+- Residential use: 50% of common plot may be used for parking
+- Non-residential use: 100% of common plot may be parking
+- Parking in road side margin after min 1.5m from BU boundary (for shade trees)
+- Vested in residents'/occupants' society on sanction of DP; cannot be sold
+
+---
+
+## Row Houses (Reg 6.13)
+- Minimum plot area for row house complex: 1000 sqm
+- Minimum common wall length: 50% of depth of row house
+- Minimum individual sub-plot: 40 sqm; max built-up 60%; min width 3.0m
+- Front margin: 2.0m; rear: 2.5m; end plot side: 2.0m (road side)
+- 5.0m open space after every 10 continuous houses
+- Maximum height: G+2, max 10.0m (from top of hollow plinth if parking at ground)
+
+---
+
+## Podium (Reg 6.14)
+- Allowed for plots >4000 sqm
+- Not in front setback/margin
+- Min 6.0m from plot boundary all sides
+- Structural design must bear fire engine loads
+- Chief Fire Officer consent required
+- Common plot may be at elevated level up to max 10m (below: swimming pool, banquet hall, parking); parapet ≥2.0m
+- Podium for parking only
+
+
+## ROOM SIZE REQUIREMENTS
+GDCR ROOM MINIMUMS (mandatory — never generate rooms smaller than these):
+  Room Type      | Min Area (sqm) | Min Width (m)
+  -------------- | -------------- | -------------
+  Living/Hall     | 9.5            | 3.0
+  Dining          | 7.5            | 2.5
+  Master Bedroom  | 9.5            | 2.7
+  Secondary Bedroom| 7.5            | 2.5
+  Kitchen         | 5.5            | 1.8
+  Bathroom        | 2.16           | 1.2
+  WC/Toilet       | 1.65           | 1.1
+  Utility         | 1.8            | 1.2
+  Foyer           | 1.8            | 1.5
+  Balcony (depth) | 0.0            | 1.2
+  Passage         | 0.0            | 1.0
+
+## ARCHITECTURAL DESIGN PRINCIPLES (mandatory)
+
+1. ENTRY SEQUENCE: Corridor → Foyer → Living/Dining (public zone) → Passage → Bedrooms (private zone)
+2. KITCHEN ADJACENCY: Kitchen must share a wall with dining or living room; place utility room adjacent to kitchen
+3. MASTER SUITE: Master bedroom on exterior wall with attached bathroom on interior side
+4. WET ZONE CLUSTERING: Group all bathrooms, toilets, kitchen, and utility to share plumbing stacks (align vertically across floors)
+5. BALCONY ACCESS: Balcony accessible from living room or master bedroom; placed on exterior face only
+6. NO LANDLOCKED ROOMS: Every habitable room (living, dining, bedroom) must touch an exterior wall for ventilation (GDCR Reg 13.4)
+7. PASSAGE AS SPINE: For 2BHK and larger, a passage connects the foyer to the bedroom zone — do NOT route through the living room to reach bedrooms
+8. PROPORTIONALITY: No room should be narrower than 60% of its depth; bedrooms should be roughly square
+9. MIRRORING: Units on opposite sides of the core should be mirror images for structural symmetry
+
+## ROOM PROGRAMS
+
+1BHK rooms: foyer, living, kitchen, toilet, bedroom, bathroom, balcony
+2BHK rooms: foyer, living, kitchen, utility, bedroom-1 (master with attached bathroom-1), bedroom-2, toilet (common), balcony
+3BHK rooms: foyer, living+dining, kitchen, utility, bedroom-1 (master with attached bathroom-1), bedroom-2 (with attached bathroom-2), bedroom-3, toilet (common), balcony
+4BHK rooms: foyer, living, dining, kitchen, utility, bedroom-1 (master with attached bathroom-1), bedroom-2 (with attached bathroom-2), bedroom-3, bedroom-4 (with attached bathroom-3), toilet (common), balcony
+
+## OUTPUT FORMAT
+Return ONLY a JSON object (no markdown fences, no prose):
+
+{
+  "core": {
+    "x": <float>, "y": <float>, "w": <float>, "h": <float>,
+    "stairs": [{"x": <float>, "y": <float>, "w": <float>, "h": <float>}],
+    "lifts":  [{"x": <float>, "y": <float>, "w": <float>, "h": <float>}],
+    "lobby":  {"x": <float>, "y": <float>, "w": <float>, "h": <float>}
+  },
+  "corridor": {"x": 0.0, "y": <float>, "w": <float>, "h": 1.5},
+  "units": [
+    {
+      "id": "U1",
+      "type": "2BHK",
+      "side": "south",
+      "x": <float>, "y": <float>, "w": <float>, "h": <float>,
+      "rooms": [
+        {
+          "id": "U1_R1",
+          "type": "foyer",
+          "x": <float>, "y": <float>, "w": <float>, "h": <float>
+        },
+        {
+          "id": "U1_R2",
+          "type": "living",
+          "x": <float>, "y": <float>, "w": <float>, "h": <float>
+        }
+      ],
+      "balcony": {"x": <float>, "y": <float>, "w": <float>, "h": <float>}
+    }
+  ],
+  "design_notes": "<one sentence>"
+}
+
+CRITICAL RULES:
+- Every unit MUST have a "rooms" array with ALL rooms listed in its room program above
+- Room coordinates are ABSOLUTE (relative to floor plate origin 0,0), NOT relative to unit
+- All rooms must fit within their unit's bounding box (x, y, w, h)
+- No two rooms may overlap within a unit
+- Rooms must tile the unit area with minimal gaps
+- Balcony projects OUTSIDE the unit envelope on the exterior face
+
+
+[48826 chars]
+
+=== USER PROMPT (Layout JSON request) ===
+Design a complete room-level floor plan for this residential tower:
+
+FLOOR PLATE: 70.3m wide (X) x 66.7m deep (Y) = 4689 sqm
+BUILDING: 13 floors, 39.0m tall
+SEGMENT: mid
+UNITS PER CORE: 4
+
+LAYOUT GEOMETRY:
+  Corridor: Y = 32.60 to Y = 34.10 (width 1.5m)
+  South band: Y = 0 to 32.60 (depth 32.60m) — 2 unit(s)
+  North band: Y = 34.10 to 66.70 (depth 32.60m) — 2 unit(s)
+  Core: centered at X ≈ 35.1, width ≈ 7.0m
+
+UNIT ASSIGNMENTS:
+  South U1: 2BHK (~31.6m x 32.6m)
+  South U2: 3BHK (~31.6m x 32.6m)
+  North U3: 2BHK (~31.6m x 32.6m)
+  North U4: 3BHK (~31.6m x 32.6m)
+
+CORE COMPONENTS:
+  2 lift(s) (1.85x1.8m each)
+  2 stair(s) (1.2x3.5m each)
+  1 lobby (2.0m deep)
+
+Generate the JSON with COMPLETE room-level detail for EVERY unit. Each unit must have ALL rooms from its room program.
+
+
+[786 chars]
